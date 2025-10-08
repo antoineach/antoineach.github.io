@@ -29,7 +29,8 @@ pagination:
   </div>
   {% endif %}
 
-  
+
+
 
   <ul class="post-list">
 
