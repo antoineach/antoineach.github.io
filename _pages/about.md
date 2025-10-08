@@ -2,12 +2,12 @@
 layout: about
 title: about
 permalink: /
-subtitle: <a href='#'>Affiliations</a>. Address. Contacts. Motto. Etc.
+subtitle: 
 
 profile:
   align: right
-  image: prof_pic.jpg
-  image_circular: false # crops the image to make it circular
+  image: moi.png
+  image_circular: true # crops the image to make it circular
   #more_info: >
   #  <p>555 your office number</p>
   #  <p>123 your address street</p>
@@ -17,7 +17,7 @@ selected_papers: true # includes a list of papers marked as "selected={true}"
 social: true # includes social icons at the bottom of the page
 
 announcements:
-  enabled: true # includes a list of news items
+  enabled: false # includes a list of news items
   scrollable: true # adds a vertical scroll bar if there are more than 3 news items
   limit: 5 # leave blank to include all the news in the `_news` folder
 
@@ -25,10 +25,43 @@ latest_posts:
   enabled: true
   scrollable: true # adds a vertical scroll bar if there are more than 3 new posts items
   limit: 3 # leave blank to include all the blog posts
+  
 ---
-Ceci est un test
-Write your biography here. Tell the world about yourself. Link to your favorite [subreddit](http://reddit.com). You can put a picture in, too. The code is already in, just name your picture `prof_pic.jpg` and put it in the `img/` folder.
+## 👋 About Me
 
-Put your address / P.O. box / other info right below your picture. You can also disable any of these elements by editing `profile` property of the YAML header of your `_pages/about.md`. Edit `_bibliography/papers.bib` and Jekyll will render your [publications page](/al-folio/publications/) automatically.
+I’m a **PhD student in Artificial Intelligence**, specializing in **3D vision, signal processing, and multimodal learning**.  
+I graduated from **ENSEIRB-MATMECA** (*National Graduate School of Electronics, Computer Science, Telecommunications, Mathematics and Mechanics of Bordeaux*) in 2025, where I followed the **Telecommunications track** with a focus on *Image, Signal, and Communications*.  
+In parallel, I earned a **Master’s degree in ISIS** (*Engineering of Systems for Image and Signal*) at the **University of Bordeaux**.
 
-Link to your social media connections, too. This theme is set up to use [Font Awesome icons](https://fontawesome.com/) and [Academicons](https://jpswalsh.github.io/academicons/), like the ones below. Add your Facebook, Twitter, LinkedIn, Google Scholar, or just disable all of them.
+During my studies, I was part of an *Engineer-PhD track* in **AI for semi-supervised semantic segmentation**, which naturally led to my current doctoral research.
+
+---
+
+## 🎓 PhD Research
+
+I’m currently pursuing my PhD at the **CEA** (*French Alternative Energies and Atomic Energy Commission*), in collaboration with the **IMS Laboratory** (*Integration of Material to Systems*), a joint research unit of the **CNRS** (*National Centre for Scientific Research*), **University of Bordeaux**, and **Bordeaux INP**.
+
+My research focuses on:  
+> **Machine Learning for segmentation and object detection through multimodal fusion of point clouds and images.**
+
+This work explores how **LiDAR point clouds**, which provide accurate 3D geometry but limited sampling density and visibility, can be **fused with camera images** that offer rich texture and color information.  
+By combining both modalities, the goal is to achieve the **best of both worlds** — spatial precision from LiDAR and visual richness from RGB data — for improved 3D scene understanding.
+
+---
+
+## 🌐 Research Interests
+
+- 3D point cloud segmentation & understanding  
+- Multimodal data fusion (LiDAR–Camera)  
+- Self- and semi-supervised learning  
+- Efficient and frugal AI  
+- Scientific visualization and signal processing
+
+---
+
+## 📫 Contact
+
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-blue?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/antoine-ach-2724b4253/)  
+Feel free to reach out for collaborations, research discussions, or technical projects.
+
+---
