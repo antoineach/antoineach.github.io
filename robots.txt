@@ -1,4 +1,4 @@
 User-agent: *
 Disallow:
 
-Sitemap: https://antoineach.github.io//sitemap.xml
+Sitemap: http://antoineach.github.io//sitemap.xml
