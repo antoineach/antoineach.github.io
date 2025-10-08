@@ -8,12 +8,9 @@ profile:
   align: right
   image: moi.png
   image_circular: true # crops the image to make it circular
-  #more_info: >
-  #  <p>555 your office number</p>
-  #  <p>123 your address street</p>
-  #  <p>Your City, State 12345</p>
+  more_info: 
 
-selected_papers: true # includes a list of papers marked as "selected={true}"
+selected_papers: false # includes a list of papers marked as "selected={true}"
 social: true # includes social icons at the bottom of the page
 
 announcements:
@@ -56,12 +53,3 @@ By combining both modalities, the goal is to achieve the **best of both worlds**
 - Self- and semi-supervised learning  
 - Efficient and frugal AI  
 - Scientific visualization and signal processing
-
----
-
-## 📫 Contact
-
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-blue?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/antoine-ach-2724b4253/)  
-Feel free to reach out for collaborations, research discussions, or technical projects.
-
----
