@@ -8,10 +8,9 @@ first_name: Antoine
 middle_name: 
 last_name: Ach
 contact_note: 
-description: > # the ">" symbol means to ignore newlines until "footer_text:"
-  A simple, whitespace theme for academics. Based on [*folio](https://github.com/bogoli/-folio) design.
+description: 
 footer_text: 
-keywords: jekyll, jekyll-theme, academic-website, portfolio-website # add your own keywords or leave empty
+keywords:  # add your own keywords or leave empty
 lang: en # the language of your site (for example: en, fr, cn, ru, etc.)
 icon: ⚛️ # the emoji used as the favicon (alternatively, provide image name in /assets/img/)
 
@@ -83,8 +82,8 @@ bing_site_verification: # out your bing-site-verification ID (Bing Webmaster)
 # Blog
 # -----------------------------------------------------------------------------
 
-blog_name: al-folio # blog_name will be displayed in your blog page
-blog_description: a simple whitespace theme for academics
+blog_name: AI Chronicles # blog_name will be displayed in your blog page
+blog_description: Research notes, paper reviews, and reflections on artificial intelligence
 permalink: /blog/:year/:title/
 lsi: false # produce an index for related posts
 
@@ -261,8 +260,8 @@ display_categories: ["external-services"] # these categories will be displayed o
 # -----------------------------------------------------------------------------
 
 scholar:
-  last_name: [Einstein]
-  first_name: [Albert, A.]
+  last_name: [Ach]
+  first_name: [Antoine, A.]
 
   style: apa
   locale: en
