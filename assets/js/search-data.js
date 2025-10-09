@@ -30,15 +30,15 @@ ninja.data = [{
           handler: () => {
             window.location.href = "/repositories/";
           },
-        },{id: "post-a-distill-style-blog-post",
+        },{id: "post-multihead-attention-visualized",
         
-          title: "a distill-style blog post",
+          title: "MultiHead Attention Visualized",
         
-        description: "an example of a distill-style blog post and main elements",
+        description: "A comprehensive explanation of MultiHead Attention with dimensions.",
         section: "Posts",
         handler: () => {
           
-            window.location.href = "/blog/2021/plotly/";
+            window.location.href = "/blog/2025/multiheadattention/";
           
         },
       },{id: "books-the-godfather",
