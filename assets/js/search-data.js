@@ -30,7 +30,29 @@ ninja.data = [{
           handler: () => {
             window.location.href = "/repositories/";
           },
-        },{id: "post-multihead-attention-visualized",
+        },{id: "post-pointtransformer-v1-explained",
+        
+          title: "PointTransformer v1 Explained",
+        
+        description: "A comprehensive explanation of PointTransformer v1 with key dimensional insights.",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2025/pointTransformerV1/";
+          
+        },
+      },{id: "post-batching-pointclouds",
+        
+          title: "Batching PointClouds",
+        
+        description: "A comprehensive explanation of Batching PointClouds.",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2025/batchingPointclouds/";
+          
+        },
+      },{id: "post-multihead-attention-visualized",
         
           title: "MultiHead Attention Visualized",
         
