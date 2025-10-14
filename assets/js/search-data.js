@@ -30,11 +30,11 @@ ninja.data = [{
           handler: () => {
             window.location.href = "/repositories/";
           },
-        },{id: "post-pointtransformer-v1-explained",
+        },{id: "post-point-transformer-v1-architecture-and-implementation-details",
         
-          title: "PointTransformer v1 Explained",
+          title: "Point Transformer v1: Architecture and Implementation Details",
         
-        description: "A comprehensive explanation of PointTransformer v1 with key dimensional insights.",
+        description: "Detailed analysis of the Point Transformer v1 architecture for point-cloud segmentation and classification",
         section: "Posts",
         handler: () => {
           
