@@ -39,7 +39,7 @@ During my studies, I was part of an *Engineer-PhD track* in **AI for semi-superv
 I’m currently pursuing my PhD at the **CEA** (*French Alternative Energies and Atomic Energy Commission*), in collaboration with the **IMS Laboratory** (*Integration of Material to Systems*), a joint research unit of the **CNRS** (*National Centre for Scientific Research*), **University of Bordeaux**, and **Bordeaux INP**.
 
 My research focuses on:  
-> **Machine Learning for segmentation and object detection through multimodal fusion of point clouds and images.**
+> **Machine Learning for segmentation through multimodal fusion of point clouds and images.**
 
 This work explores how **LiDAR point clouds**, which provide accurate 3D geometry but limited sampling density and visibility, can be **fused with camera images** that offer rich texture and color information.  
 By combining both modalities, the goal is to achieve the **best of both worlds** — spatial precision from LiDAR and visual richness from RGB data — for improved 3D scene understanding.
