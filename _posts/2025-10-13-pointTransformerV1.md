@@ -162,6 +162,12 @@ The shape `(N, K, num_groups, dim_per_group)` represents:
 
 And each group gets its own attention weight, allowing fine-grained control over feature aggregation.
 
+For example a group may focus on 
+- Dimensions 0-15: color information
+- Dimensions 16-31: geometric properties
+- Dimensions 32-47: texture features
+- Dimensions 48-63: semantic context
+
 
 ---
 
@@ -171,46 +177,77 @@ And each group gets its own attention weight, allowing fine-grained control over
 
 `TransitionDown` reduces the number of points (analogous to strided conv).
 
-### Case 1: stride = 1 (no downsampling)
-
-{% include figure.liquid path="assets/img/pointTransformerv1/transitionDown_stride=1.svg" class="img-fluid rounded z-depth-1" %}
-
-Simple projection:
-
-```
-(N, in_dim) → Linear → BN → ReLU → (N, out_dim)
-```
-
-### Case 2: stride > 1 (downsampling)
 
 {% include figure.liquid path="assets/img/pointTransformerv1/transitionDown_stride!=1.svg" class="img-fluid rounded z-depth-1" %}
 
 Pipeline (high-level):
 
 1. **Compute new counts**: for each cloud, new_count = old_count // stride.
-2. **Furthest Point Sampling (FPS)**: choose M ≈ N/stride representative points that maximize minimal distance; ensures spatial coverage.
+2. **Farthest Point Sampling (FPS)**: choose M ≈ N/stride representative points that maximize minimal distance; ensures spatial coverage.
 3. **K-NN grouping**: for each sampled point, gather its K neighbors in the original cloud (with relative positions if `use_xyz=True`). Result: `(M, K, 3 + in_dim)`.
 4. **Projection + normalization**: linear on neighbor features, BatchNorm + ReLU → `(M, out_dim, K)`.
 5. **MaxPooling**: aggregate K neighbors by channel-wise max → `(M, out_dim)`.
 
 Result: reduce N points to M points (M ≈ N/stride) with locally aggregated features.
 
+{% include figure.liquid path="assets/img/pointTransformerv1/fps_knn.png" class="img-fluid rounded z-depth-1" %}
 ---
 
 ## TransitionUp: Upsampling with Skip Connections
 
 `TransitionUp` increases resolution and fuses multi-scale information.
 
-### Case 1: no skip connection (`pxo2 = None`)
-
-{% include figure.liquid path="assets/img/pointTransformerv1/transitionUp_without_pxo.svg" class="img-fluid rounded z-depth-1" %}
-
-
-### Case 2: with skip connection (`pxo2` provided)
 
 {% include figure.liquid path="assets/img/pointTransformerv1/transitionUp_with_pxoo.svg" class="img-fluid rounded z-depth-1" %}
 
 
+**Explanation:**
+
+The interpolation transfers features from M source points to N target points (typically M < N for upsampling).
+
+{% include figure.liquid path="assets/img/pointTransformerv1/interpolation.svg" class="img-fluid rounded z-depth-1" %}
+
+**Algorithm:**
+1. **K-NN**: For each target point, find its K=3 nearest neighbors in the source cloud
+2. **Weights**: Compute normalized inverse distance weights: points closer to the target have higher weights
+3. **Interpolation**: Weighted average of the K neighbor features
+
+**Code:**
+
+```python
+def interpolation(p_source, p_target, x_source, K=3):
+    """
+    Args:
+        p_source: (M, 3) - source positions
+        p_target: (N, 3) - target positions  
+        x_source: (M, C) - source features
+    Returns:
+        output: (N, C) - interpolated features
+    """
+    N, C = p_target.shape[0], x_source.shape[1]
+    output = np.zeros((N, C))
+    
+    for n in range(N):
+        # Find K nearest neighbors
+        distances = np.linalg.norm(p_source - p_target[n], axis=1)
+        k_nearest = np.argsort(distances)[:K]
+        
+        # Inverse distance weighting
+        dists = distances[k_nearest]
+        weights = 1.0 / (dists + 1e-8)
+        weights /= weights.sum()  # normalize
+        
+        # Weighted average
+        for i in range(K):
+            output[n] += weights[i] * x_source[k_nearest[i]]
+    
+    return output
+```
+
+**Formula:**
+$$
+\text{output}[n] = \sum_{i=0}^{K-1} w_i \cdot \text{x}_\text{source}[\text{neighbor}_i], \quad w_i = \frac{1/d_i}{\sum_j 1/d_j}
+$$
 
 
 ## References
