@@ -1,0 +1,72 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN" "http://www.w3.org/TR/REC-html40/loose.dtd"> <html><body> <p>flowchart TD Input[“Input (pxo)”] –&gt; P[“positions<br>(N, 3)”] Input –&gt; X[“features<br>(N, in_dim)”] Input –&gt; O[“offsets<br>(B,)”]</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>%% --- Stage 1 : QKV projections ---
+X -- linear_q --&gt; Q["query&lt;br&gt;(N, out_dim)"]
+X -- linear_k --&gt; K["key&lt;br&gt;(N, out_dim)"]
+X -- linear_v --&gt; V["value&lt;br&gt;(N, out_dim)"]
+
+%% --- Stage 2 : Neighbor grouping ---
+P --&gt; Grouping
+O --&gt; Grouping
+K --&gt; Grouping
+Grouping["pointops.grouping&lt;br&gt;(nsample=K)"] --&gt; KNeighbors["key_neighbors&lt;br&gt;(N, K, out_dim)"]
+V --&gt; GroupingV
+GroupingV["pointops.grouping&lt;br&gt;(nsample=K)"] --&gt; VNeighbors["value_neighbors&lt;br&gt;(N, K, out_dim)"]
+
+%% --- Stage 3 : Relative positions ---
+P --&gt; GroupingPos
+GroupingPos["pointops.grouping&lt;br&gt;(nsample=K, use_xyz=True)"] --&gt; PNeighbors["neighbor_positions&lt;br&gt;(N, K, 3)"]
+PNeighbors --&gt; RelPos["relative_positions&lt;br&gt;(N, K, 3)"]
+RelPos -- pos_enc MLP --&gt; EncPos["encoded_positions&lt;br&gt;(N, K, out_dim)"]
+
+%% --- Stage 4 : Attention weight computation ---
+Q -- unsqueeze(1) --&gt; QExp["query_expanded&lt;br&gt;(N, 1, out_dim)"]
+KNeighbors --&gt; Diff["K - Q"]
+QExp --&gt; Diff
+Diff --&gt; QKDiff["qk_diff&lt;br&gt;(N, K, out_dim)"]
+EncPos --&gt; Combine
+QKDiff --&gt; Combine
+Combine["qk_diff + encoded_pos"] --&gt; AttnInput["attention_input&lt;br&gt;(N, K, out_dim)"]
+AttnInput -- linear_w --&gt; AttnPre["attn_pre&lt;br&gt;(N, K, mid_dim)"]
+AttnPre -- Softmax(dim=2) --&gt; AttnWeights["attention_weights&lt;br&gt;(N, K, mid_dim)"]
+
+%% --- Stage 5 : Feature aggregation ---
+VNeighbors --&gt; CombFeats["V + encoded_pos"]
+EncPos --&gt; CombFeats
+CombFeats --&gt; Combined["combined_features&lt;br&gt;(N, K, out_dim)"]
+Combined -- "project via shared planes" --&gt; CombinedProj["(N, K, nshare, out_dim/nshare)"]
+AttnWeights -- unsqueeze(2) --&gt; AttnExp["attention_expanded&lt;br&gt;(N, K, 1, mid_dim)"]
+CombinedProj --&gt; Multiply
+AttnExp --&gt; Multiply
+Multiply["weighted sum&lt;br&gt;(N, K, nshare, out_dim/nshare)"]
+  --&gt; Aggregated["sum(dim=1)&lt;br&gt;(N, nshare, out_dim/nshare)"]
+Aggregated -- "reshape" --&gt; Output["Output&lt;br&gt;(N, out_dim)"]
+
+%% --- Styles ---
+style Input fill:#f3f4f6,stroke:#6b7280,stroke-width:2px
+style P fill:#e0f2fe,stroke:#2563eb,stroke-width:2px
+style X fill:#e0f2fe,stroke:#2563eb,stroke-width:2px
+style O fill:#e0f2fe,stroke:#2563eb,stroke-width:2px
+
+style Q fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+style K fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+style V fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+
+style Grouping fill:#fef3c7,stroke:#d97706,stroke-width:2px
+style GroupingV fill:#fef3c7,stroke:#d97706,stroke-width:2px
+style GroupingPos fill:#fef3c7,stroke:#d97706,stroke-width:2px
+
+style KNeighbors fill:#e0e7ff,stroke:#6366f1,stroke-width:2px
+style VNeighbors fill:#e0e7ff,stroke:#6366f1,stroke-width:2px
+style PNeighbors fill:#e0e7ff,stroke:#6366f1,stroke-width:2px
+style RelPos fill:#e0e7ff,stroke:#6366f1,stroke-width:2px
+style EncPos fill:#fce7f3,stroke:#db2777,stroke-width:2px
+
+style QKDiff fill:#fed7aa,stroke:#ea580c,stroke-width:2px
+style AttnInput fill:#fed7aa,stroke:#ea580c,stroke-width:2px
+style AttnPre fill:#fef3c7,stroke:#d97706,stroke-width:2px
+style AttnWeights fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+
+style Combined fill:#e0e7ff,stroke:#6366f1,stroke-width:2px
+style CombinedProj fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
+style Aggregated fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
+style Output fill:#dcfce7,stroke:#16a34a,stroke-width:3px
+</code></pre></div></div> </body></html>
