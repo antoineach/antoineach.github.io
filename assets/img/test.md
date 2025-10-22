@@ -1,3 +1,4 @@
+```mermaid
 ---
 config:
   layout: dagre
@@ -78,3 +79,4 @@ flowchart TD
     style CombinedProj fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
     style Aggregated fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
     style Output fill:#dcfce7,stroke:#16a34a,stroke-width:3px
+```
