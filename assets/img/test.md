@@ -11,5 +11,4 @@ graph LR
     D3 -->|N₁,C₁| D4[Decoder Stage 1]
     D4 -->|N,B| E[SegHead (linear + norm + relu + linear)]
     E -->|N,num_classes| F[x_seg_logits]
-
 ```
