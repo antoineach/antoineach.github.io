@@ -19,19 +19,19 @@ graph LR
     Enc4 -->|N4 x 512<br>BOTTLENECK| Dec4["Decoder 4<br>Unpool + 1 block"]
     Enc4 --> C4["cluster4"]
     
-    C4 --> Dec4
+    C4 -> Dec4
     Enc3 -.skip N3 x 384.-> Dec4
     
     Dec4 -->|N3 x 384| Dec3["Decoder 3<br>Unpool + 1 block"]
-    C3 --> Dec3
+    C3 -> Dec3
     Enc2 -.skip N2 x 192.-> Dec3
     
     Dec3 -->|N2 x 192| Dec2["Decoder 2<br>Unpool + 1 block"]
-    C2 --> Dec2
+    C2 -> Dec2
     Enc1 -.skip N1 x 96.-> Dec2
     
     Dec2 -->|N1 x 96| Dec1["Decoder 1<br>Unpool + 1 block"]
-    C1 --> Dec1
+    C1 -> Dec1
     PatchEmbed -.skip N x 48.-> Dec1
     
     Dec1 -->|N x 48| SegHead["Segmentation Head<br>2x Linear + BN + ReLU"]
