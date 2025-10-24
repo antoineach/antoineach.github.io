@@ -18,8 +18,8 @@ graph LR
     
     subgraph OutputPXO[" "]
         pout["p"]
-        xout["x"]
-        oout["o"]
+        xout["x'"]
+        oout["reference_index"]
     end
     
     BlockSeq -->|N x 3| pout
