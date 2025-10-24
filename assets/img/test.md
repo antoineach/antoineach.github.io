@@ -1,49 +1,14 @@
 ```mermaid
----
-config:
-  layout: dagre
----
-flowchart TD
-    Input["Input<br>coord (N, 3)<br>feat (N, in_channels)<br>offset (B,)"] --> Proj["Linear<br>(in_channels → embed_channels)"]
-    
-    Proj --> ProjOut["(N, embed_channels)"]
-    ProjOut --> BN1["BatchNorm1d"]
-    BN1 --> BN1Out["(N, embed_channels)"]
-    BN1Out --> ReLU1["ReLU"]
-    ReLU1 --> FeatEmbed["feat_embedded<br>(N, embed_channels)"]
-    
-    Input --> Coord["coord<br>(N, 3)"]
-    Input --> Offset["offset<br>(B,)"]
-    
-    FeatEmbed --> BlockSeq["BlockSequence<br>(depth blocks)"]
-    Coord --> BlockSeq
-    Offset --> BlockSeq
-    
-    subgraph BlockSequence["BlockSequence (depth blocks)"]
-        direction TB
-        KNN["K-NN Query<br>Find K neighbors<br>reference_index (N, K)"]
-        
-        Block1["Block 1<br>GroupedVectorAttention"]
-        Block2["Block 2<br>GroupedVectorAttention"]
-        BlockN["Block depth<br>GroupedVectorAttention"]
-        
-        KNN --> Block1
-        Block1 --> Block2
-        Block2 --> BlockN
-    end
-    
-    BlockSeq --> Output["Output<br>coord (N, 3)<br>feat (N, embed_channels)<br>offset (B,)"]
-    
-    style Input fill:#f3f4f6,stroke:#6b7280,stroke-width:2px
-    style Proj fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
-    style BN1 fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px
-    style ReLU1 fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px
-    style FeatEmbed fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
-    
-    style KNN fill:#fef3c7,stroke:#d97706,stroke-width:2px
-    style Block1 fill:#fce7f3,stroke:#db2777,stroke-width:2px
-    style Block2 fill:#fce7f3,stroke:#db2777,stroke-width:2px
-    style BlockN fill:#fce7f3,stroke:#db2777,stroke-width:2px
-    
-    style Output fill:#dcfce7,stroke:#16a34a,stroke-width:3px
+graph LR
+    A[p, x, o] -->|N,B| B[GVAPatchEmbed]
+    B -->|N₁,C₁| C1[Encoder Stage 1]
+    C1 -->|N₂,C₂| C2[Encoder Stage 2]
+    C2 -->|N₃,C₃| C3[Encoder Stage 3]
+    C3 -->|N₄,C₄| C4[Encoder Stage 4]
+    C4 -->|N₄,C₄| D1[Decoder Stage 4]
+    D1 -->|N₃,C₃| D2[Decoder Stage 3]
+    D2 -->|N₂,C₂| D3[Decoder Stage 2]
+    D3 -->|N₁,C₁| D4[Decoder Stage 1]
+    D4 -->|N,B| E[SegHead (linear + norm + relu + linear)]
+    E -->|N,num_classes| F[x_seg_logits]
 ```
