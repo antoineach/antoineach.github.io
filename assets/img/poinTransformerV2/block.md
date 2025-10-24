@@ -54,4 +54,5 @@ graph LR
     
     style pout fill:#dcfce7,stroke:#16a34a,stroke-width:2px
     style xout fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+    style oout fill:#dcfce7,stroke:#16a34a,stroke-width:2px
 ```
