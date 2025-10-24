@@ -31,14 +31,12 @@ graph LR
         pout["p"]
         xout["x"]
         oout_t["o"]
-        oout["reference_index"]
     end
     
     p -->|N x 3| pout
     ReLU -->|N x C| xout
 
     o --> |B| oout_t
-    ref -->|N x K| oout
     
     style p fill:#f3f4f6,stroke:#6b7280,stroke-width:2px
     style x fill:#f3f4f6,stroke:#6b7280,stroke-width:2px
@@ -59,5 +57,4 @@ graph LR
     style pout fill:#dcfce7,stroke:#16a34a,stroke-width:2px
     style xout fill:#dcfce7,stroke:#16a34a,stroke-width:2px
     style oout_t fill:#dcfce7,stroke:#16a34a,stroke-width:2px
-    style oout fill:#dcfce7,stroke:#16a34a,stroke-width:2px
 ```
