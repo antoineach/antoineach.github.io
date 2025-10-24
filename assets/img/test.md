@@ -1,137 +1,165 @@
 ```mermaid
+---
+config:
+  layout: elk
+---
 graph LR
-    %% Input data nodes
-    IN_P["p<br>N0 x 3"]
-    IN_X["x<br>N0 x in_dim"]
-    IN_O["o<br>B"]
-
-    classDef data fill:#FFF3E0,stroke:#E65100,color:#000;
-    classDef block fill:#E3F2FD,stroke:#0D47A1,color:#000;
-    classDef skip fill:#E8F5E9,stroke:#1B5E20,color:#000;
-    classDef cluster fill:#F3E5F5,stroke:#6A1B9A,color:#000;
-    classDef head fill:#FCE4EC,stroke:#880E4F,color:#000;
-
-    class IN_P,IN_X,IN_O data
-
-    %% Patch embed
-    IN_P -->|N0_x_3 N0_x_in_dim B| PE["GVAPatchEmbed<br>outputs"]
-    IN_X --> PE
-    IN_O --> PE
-    class PE block
-
-    PE -->|N1_x_3 N1_x_Cpe B| P1["p<br>N1 x 3"]
-    PE -->|N1_x_3 N1_x_Cpe B| X1["x<br>N1 x Cpe"]
-    PE -->|B| O1["o<br>B"]
-    class P1,X1,O1 data
-
-    %% Encoder stages (stacked)
-    P1 -->|N1_x_3 N1_x_Ce1 B| ENC1["Encoder 1"]
-    X1 --> ENC1
-    O1 --> ENC1
-    class ENC1 block
-
-    ENC1 -->|N2_x_3 N2_x_Ce1 B| P2["p<br>N2 x 3"]
-    ENC1 -->|N2_x_3 N2_x_Ce1 B| X2["x<br>N2 x Ce1"]
-    ENC1 -->|M1| CL1["cluster1"]
-    class P2,X2 data
-    class CL1 cluster
-
-    P2 -->|N2_x_3 N2_x_Ce2 B| ENC2["Encoder 2"]
-    X2 --> ENC2
-    O1 --> ENC2
-    class ENC2 block
-
-    ENC2 -->|N3_x_3 N3_x_Ce2 B| P3["p<br>N3 x 3"]
-    ENC2 -->|N3_x_3 N3_x_Ce2 B| X3["x<br>N3 x Ce2"]
-    ENC2 -->|M2| CL2["cluster2"]
-    class P3,X3 data
-    class CL2 cluster
-
-    P3 -->|N3_x_3 N3_x_Ce3 B| ENC3["Encoder 3"]
-    X3 --> ENC3
-    O1 --> ENC3
-    class ENC3 block
-
-    ENC3 -->|N4_x_3 N4_x_Ce3 B| P4["p<br>N4 x 3"]
-    ENC3 -->|N4_x_3 N4_x_Ce3 B| X4["x<br>N4 x Ce3"]
-    ENC3 -->|M3| CL3["cluster3"]
-    class P4,X4 data
-    class CL3 cluster
-
-    P4 -->|N4_x_3 N4_x_Ce4 B| ENC4["Encoder 4"]
-    X4 --> ENC4
-    O1 --> ENC4
-    class ENC4 block
-
-    ENC4 -->|N5_x_3 N5_x_Ce4 B| P5["p<br>N5 x 3"]
-    ENC4 -->|N5_x_3 N5_x_Ce4 B| X5["x<br>N5 x Ce4"]
-    ENC4 -->|M4| CL4["cluster4"]
-    class P5,X5 data
-    class CL4 cluster
-
-    %% Create explicit skip nodes (separate boxes for clarity)
-    SK1["skip1<br>p N1 x 3<br>x N1 x Ce1"]:::skip
-    SK2["skip2<br>p N2 x 3<br>x N2 x Ce2"]:::skip
-    SK3["skip3<br>p N3 x 3<br>x N3 x Ce3"]:::skip
-    SK4["skip4<br>p N4 x 3<br>x N4 x Ce4"]:::skip
-
-    P2 -.-> SK1
-    P3 -.-> SK2
-    P4 -.-> SK3
-    P5 -.-> SK4
-
-    X2 -.-> SK1
-    X3 -.-> SK2
-    X4 -.-> SK3
-    X5 -.-> SK4
-
-    CL1 -.-> SK1
-    CL2 -.-> SK2
-    CL3 -.-> SK3
-    CL4 -.-> SK4
-
-    %% Decoder stages (reverse order). Each decoder consumes (points, skip, cluster)
-    P5 -->|N5_x_3 N5_x_Cd4 B| DEC4["Decoder 4<br>inputs points skip4 cluster4"]
-    SK4 --> DEC4
-    CL4 --> DEC4
-    class DEC4 block
-
-    DEC4 -->|N4_x_3 N4_x_Cd3 B| PD4["p<br>N4 x 3"]
-    DEC4 -->|N4_x_3 N4_x_Cd3 B| XD4["x<br>N4 x Cd3"]
-    class PD4,XD4 data
-
-    PD4 -->|N4_x_3 N4_x_Cd3 B| DEC3["Decoder 3<br>inputs points skip3 cluster3"]
-    SK3 --> DEC3
-    CL3 --> DEC3
-    class DEC3 block
-
-    DEC3 -->|N3_x_3 N3_x_Cd2 B| PD3["p<br>N3 x 3"]
-    DEC3 -->|N3_x_3 N3_x_Cd2 B| XD3["x<br>N3 x Cd2"]
-    class PD3,XD3 data
-
-    PD3 -->|N3_x_3 N3_x_Cd2 B| DEC2["Decoder 2<br>inputs points skip2 cluster2"]
-    SK2 --> DEC2
-    CL2 --> DEC2
-    class DEC2 block
-
-    DEC2 -->|N2_x_3 N2_x_Cd1 B| PD2["p<br>N2 x 3"]
-    DEC2 -->|N2_x_3 N2_x_Cd1 B| XD2["x<br>N2 x Cd1"]
-    class PD2,XD2 data
-
-    PD2 -->|N2_x_3 N2_x_Cd1 B| DEC1["Decoder 1<br>inputs points skip1 cluster1"]
-    SK1 --> DEC1
-    CL1 --> DEC1
-    class DEC1 block
-
-    DEC1 -->|N1_x_3 N1_x_Cd0 B| PD1["p<br>N1 x 3"]
-    DEC1 -->|N1_x_3 N1_x_Cd0 B| XD1["x<br>N1 x Cd0"]
-    class PD1,XD1 data
-
-    %% Segmentation head consumes final x and outputs logits
-    XD1 -->|N1_x_Cd0| SH["SegHead<br>linear + PointBatchNorm + ReLU + linear<br>-> logits N1 x num_classes"]
-    class SH head
-
-    SH -->|N1_x_num_classes| OUT["seg_logits<br>N1 x num_classes"]
-    class OUT data
-
+    subgraph Input
+        p0["p0<br>N x 3"]
+        x0["x0<br>N x in_ch"]
+        o0["o0<br>B"]
+    end
+    
+    p0 --> PatchEmbed
+    x0 --> PatchEmbed
+    o0 --> PatchEmbed
+    
+    PatchEmbed["GVAPatchEmbed<br>depth=1<br>no downsample"] --> p0out["p0<br>N x 3"]
+    PatchEmbed --> x0out["x0<br>N x 48"]
+    PatchEmbed --> o0out["o0<br>B"]
+    
+    p0out --> Enc1
+    x0out --> Enc1
+    o0out --> Enc1
+    
+    Enc1["Encoder 1<br>GridPool + 2 blocks<br>grid_size=0.06"] --> p1["p1<br>N1 x 3"]
+    Enc1 --> x1["x1<br>N1 x 96"]
+    Enc1 --> o1["o1<br>B"]
+    Enc1 --> c1["cluster1"]
+    
+    p1 --> Enc2
+    x1 --> Enc2
+    o1 --> Enc2
+    
+    Enc2["Encoder 2<br>GridPool + 2 blocks<br>grid_size=0.12"] --> p2["p2<br>N2 x 3"]
+    Enc2 --> x2["x2<br>N2 x 192"]
+    Enc2 --> o2["o2<br>B"]
+    Enc2 --> c2["cluster2"]
+    
+    p2 --> Enc3
+    x2 --> Enc3
+    o2 --> Enc3
+    
+    Enc3["Encoder 3<br>GridPool + 6 blocks<br>grid_size=0.24"] --> p3["p3<br>N3 x 3"]
+    Enc3 --> x3["x3<br>N3 x 384"]
+    Enc3 --> o3["o3<br>B"]
+    Enc3 --> c3["cluster3"]
+    
+    p3 --> Enc4
+    x3 --> Enc4
+    o3 --> Enc4
+    
+    Enc4["Encoder 4<br>GridPool + 2 blocks<br>grid_size=0.48"] --> p4["p4<br>N4 x 3"]
+    Enc4 --> x4["x4<br>N4 x 512"]
+    Enc4 --> o4["o4<br>B"]
+    Enc4 --> c4["cluster4"]
+    
+    p4 --> Dec4
+    x4 --> Dec4
+    o4 --> Dec4
+    c4 -.cluster.-> Dec4
+    p3 -.skip.-> Dec4
+    x3 -.skip.-> Dec4
+    o3 -.skip.-> Dec4
+    
+    Dec4["Decoder 4<br>Unpool + 1 block"] --> p3d["p3<br>N3 x 3"]
+    Dec4 --> x3d["x3<br>N3 x 384"]
+    Dec4 --> o3d["o3<br>B"]
+    
+    p3d --> Dec3
+    x3d --> Dec3
+    o3d --> Dec3
+    c3 -.cluster.-> Dec3
+    p2 -.skip.-> Dec3
+    x2 -.skip.-> Dec3
+    o2 -.skip.-> Dec3
+    
+    Dec3["Decoder 3<br>Unpool + 1 block"] --> p2d["p2<br>N2 x 3"]
+    Dec3 --> x2d["x2<br>N2 x 192"]
+    Dec3 --> o2d["o2<br>B"]
+    
+    p2d --> Dec2
+    x2d --> Dec2
+    o2d --> Dec2
+    c2 -.cluster.-> Dec2
+    p1 -.skip.-> Dec2
+    x1 -.skip.-> Dec2
+    o1 -.skip.-> Dec2
+    
+    Dec2["Decoder 2<br>Unpool + 1 block"] --> p1d["p1<br>N1 x 3"]
+    Dec2 --> x1d["x1<br>N1 x 96"]
+    Dec2 --> o1d["o1<br>B"]
+    
+    p1d --> Dec1
+    x1d --> Dec1
+    o1d --> Dec1
+    c1 -.cluster.-> Dec1
+    p0out -.skip.-> Dec1
+    x0out -.skip.-> Dec1
+    o0out -.skip.-> Dec1
+    
+    Dec1["Decoder 1<br>Unpool + 1 block"] --> p0d["p0<br>N x 3"]
+    Dec1 --> x0d["x0<br>N x 48"]
+    Dec1 --> o0d["o0<br>B"]
+    
+    x0d --> SegHead["Segmentation Head<br>Linear + BN + ReLU + Linear"]
+    SegHead --> Out["logits<br>N x num_classes"]
+    
+    style p0 fill:#f3f4f6,stroke:#6b7280,stroke-width:2px
+    style x0 fill:#f3f4f6,stroke:#6b7280,stroke-width:2px
+    style o0 fill:#f3f4f6,stroke:#6b7280,stroke-width:2px
+    
+    style PatchEmbed fill:#dbeafe,stroke:#3b82f6,stroke-width:3px
+    style p0out fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px
+    style x0out fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px
+    style o0out fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px
+    
+    style Enc1 fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+    style Enc2 fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+    style Enc3 fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+    style Enc4 fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+    
+    style p1 fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px
+    style x1 fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px
+    style o1 fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px
+    style c1 fill:#fed7aa,stroke:#ea580c,stroke-width:2px
+    
+    style p2 fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px
+    style x2 fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px
+    style o2 fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px
+    style c2 fill:#fed7aa,stroke:#ea580c,stroke-width:2px
+    
+    style p3 fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px
+    style x3 fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px
+    style o3 fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px
+    style c3 fill:#fed7aa,stroke:#ea580c,stroke-width:2px
+    
+    style p4 fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px
+    style x4 fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px
+    style o4 fill:#bfdbfe,stroke:#3b82f6,stroke-width:2px
+    style c4 fill:#fed7aa,stroke:#ea580c,stroke-width:2px
+    
+    style Dec4 fill:#fce7f3,stroke:#db2777,stroke-width:2px
+    style Dec3 fill:#fce7f3,stroke:#db2777,stroke-width:2px
+    style Dec2 fill:#fce7f3,stroke:#db2777,stroke-width:2px
+    style Dec1 fill:#fce7f3,stroke:#db2777,stroke-width:2px
+    
+    style p3d fill:#fbcfe8,stroke:#db2777,stroke-width:2px
+    style x3d fill:#fbcfe8,stroke:#db2777,stroke-width:2px
+    style o3d fill:#fbcfe8,stroke:#db2777,stroke-width:2px
+    
+    style p2d fill:#fbcfe8,stroke:#db2777,stroke-width:2px
+    style x2d fill:#fbcfe8,stroke:#db2777,stroke-width:2px
+    style o2d fill:#fbcfe8,stroke:#db2777,stroke-width:2px
+    
+    style p1d fill:#fbcfe8,stroke:#db2777,stroke-width:2px
+    style x1d fill:#fbcfe8,stroke:#db2777,stroke-width:2px
+    style o1d fill:#fbcfe8,stroke:#db2777,stroke-width:2px
+    
+    style p0d fill:#fbcfe8,stroke:#db2777,stroke-width:2px
+    style x0d fill:#fbcfe8,stroke:#db2777,stroke-width:2px
+    style o0d fill:#fbcfe8,stroke:#db2777,stroke-width:2px
+    
+    style SegHead fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+    style Out fill:#dcfce7,stroke:#16a34a,stroke-width:3px
 ```
