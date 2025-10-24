@@ -37,11 +37,6 @@ graph LR
     style Enc3 fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
     style Enc4 fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
     
-    style C1 fill:#fed7aa,stroke:#ea580c,stroke-width:2px
-    style C2 fill:#fed7aa,stroke:#ea580c,stroke-width:2px
-    style C3 fill:#fed7aa,stroke:#ea580c,stroke-width:2px
-    style C4 fill:#fed7aa,stroke:#ea580c,stroke-width:2px
-    
     style Dec4 fill:#fce7f3,stroke:#db2777,stroke-width:2px
     style Dec3 fill:#fce7f3,stroke:#db2777,stroke-width:2px
     style Dec2 fill:#fce7f3,stroke:#db2777,stroke-width:2px
