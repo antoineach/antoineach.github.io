@@ -13,27 +13,27 @@ graph LR
     p -->|N x 3| KNN["K-NN Query<br>neighbours"]
     o -->|B| KNN
     
-    KNN -->|N x K<br>reference_index| Block1["Block 1"]
+    KNN --> RefIdx["reference_index<br>N x K"]
     
-    p -->|N x 3| Block1
+    p -->|N x 3| Block1["Block 1"]
     x -->|N x C| Block1
     o -->|B| Block1
+    RefIdx -->|N x K| Block1
     
     Block1 -->|N x 3| Block2["Block 2"]
     Block1 -->|N x C| Block2
     Block1 -->|B| Block2
+    RefIdx -->|N x K| Block2
     
     Block2 -->|N x 3| BlockDots["..."]
     Block2 -->|N x C| BlockDots
     Block2 -->|B| BlockDots
+    RefIdx -->|N x K| BlockDots
     
     BlockDots -->|N x 3| BlockN["Block depth"]
     BlockDots -->|N x C| BlockN
     BlockDots -->|B| BlockN
-    
-    KNN -.reference_index.-> Block2
-    KNN -.reference_index.-> BlockDots
-    KNN -.reference_index.-> BlockN
+    RefIdx -->|N x K| BlockN
     
     subgraph OutputPXO[" "]
         pout["p"]
@@ -50,6 +50,7 @@ graph LR
     style o fill:#f3f4f6,stroke:#6b7280,stroke-width:2px
     
     style KNN fill:#fed7aa,stroke:#ea580c,stroke-width:3px
+    style RefIdx fill:#fed7aa,stroke:#ea580c,stroke-width:2px
     
     style Block1 fill:#fce7f3,stroke:#db2777,stroke-width:2px
     style Block2 fill:#fce7f3,stroke:#db2777,stroke-width:2px
