@@ -7,6 +7,7 @@ graph LR
     subgraph InputPXO[" "]
         p["p"]
         x["x"]
+        o["o"]
         ref["reference_index"]
     end
     
@@ -29,12 +30,14 @@ graph LR
     subgraph OutputPXO[" "]
         pout["p"]
         xout["x"]
+        oout_t["o"]
         oout["reference_index"]
     end
     
     p -->|N x 3| pout
     ReLU -->|N x C| xout
 
+    o --> |B| oout_t
     ref -->|N x K| oout
     
     style p fill:#f3f4f6,stroke:#6b7280,stroke-width:2px
