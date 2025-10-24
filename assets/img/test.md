@@ -27,5 +27,4 @@ graph LR
     %% seg head
     DEC1 -->|p[N0,3], x[N0,Cd0], o[B]| SH["SegHead<br>[linear + norm + relu + linear]<br>→ logits[N0,num_classes]"]
     SH -->|logits[N0,num_classes]| OUT["seg_logits[N0,num_classes]"]
-
 ```
