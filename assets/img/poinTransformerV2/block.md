@@ -42,7 +42,6 @@ graph LR
     
     style p fill:#f3f4f6,stroke:#6b7280,stroke-width:2px
     style x fill:#f3f4f6,stroke:#6b7280,stroke-width:2px
-    style o fill:#f3f4f6,stroke:#6b7280,stroke-width:2px
     style ref fill:#f3f4f6,stroke:#6b7280,stroke-width:2px
     
     style FC1 fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
@@ -58,6 +57,5 @@ graph LR
     
     style pout fill:#dcfce7,stroke:#16a34a,stroke-width:2px
     style xout fill:#dcfce7,stroke:#16a34a,stroke-width:2px
-    style oout_t fill:#dcfce7,stroke:#16a34a,stroke-width:2px
     style oout fill:#dcfce7,stroke:#16a34a,stroke-width:2px
 ```
