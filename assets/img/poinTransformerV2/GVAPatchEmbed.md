@@ -10,7 +10,7 @@ graph LR
         o["o"]
     end
     
-    x -->|N x in_ch| Proj["Linear + BN + ReLU"]
+    x -->|N x in_ch| Proj["Linear<br>+ BatchNorm1d + ReLU"]
     Proj -->|N x embed_ch| BlockSeq["BlockSequence<br>depth blocks"]
     
     p -->|N x 3| BlockSeq
@@ -18,8 +18,8 @@ graph LR
     
     subgraph OutputPXO[" "]
         pout["p"]
-        xout["x'"]
-        oout["reference_index"]
+        xout["x"]
+        oout["o"]
     end
     
     BlockSeq -->|N x 3| pout
