@@ -8,16 +8,16 @@ graph LR
     
     PatchEmbed -->|N x 48| Enc1["Encoder 1<br>GridPool + 2 blocks<br>grid=0.06"]
     Enc1 -->|N1 x 96| Enc2["Encoder 2<br>GridPool + 2 blocks<br>grid=0.12"]
-    Enc1 --> C1["cluster1"]
+    Enc1 --> C1
     
     Enc2 -->|N2 x 192| Enc3["Encoder 3<br>GridPool + 6 blocks<br>grid=0.24"]
-    Enc2 --> C2["cluster2"]
+    Enc2 --> C2
     
     Enc3 -->|N3 x 384| Enc4["Encoder 4<br>GridPool + 2 blocks<br>grid=0.48"]
-    Enc3 --> C3["cluster3"]
+    Enc3 --> C3
     
     Enc4 -->|N4 x 512<br>BOTTLENECK| Dec4["Decoder 4<br>Unpool + 1 block"]
-    Enc4 --> C4["cluster4"]
+    Enc4 --> C4
     
     C4 -.cluster.-> Dec4
     Enc3 -.skip N3 x 384.-> Dec4
