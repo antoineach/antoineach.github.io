@@ -30,7 +30,7 @@ jobs:
               filedir=$(dirname "$file")
               outdir="$filedir"
               echo "$mermaid_code" > tmp.mmd
-              npx mmdc -i tmp.mmd -o "$outdir/$filename.svg" --puppeteerConfigFile .puppeteer.config.cjs 
+              npx mmdc -i tmp.mmd -o "$outdir/$filename.svg" --puppeteerConfigFile .puppeteer.config.json 
               echo "Generated $outdir/$filename.svg"
             fi
           done
