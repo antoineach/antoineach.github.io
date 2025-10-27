@@ -1,4 +1,11 @@
-
+---
+layout: post
+title: "Point Transformer v2: Architecture and Implementation Details"
+date: 2025-10-26
+description: Detailed analysis of the Point Transformer v2 architecture for point-cloud segmentation and classification
+tags: deep-learning point-cloud transformer architecture
+categories: computer-vision
+---
 
 # Point Transformer v2: Architecture et Améliorations
 
