@@ -30,7 +30,7 @@ jobs:
               filedir=$(dirname "$file")
               outdir="$filedir"
               echo "$mermaid_code" > tmp.mmd
-              npx mmdc -i tmp.mmd -o "$outdir/$filename.svg"
+              npx mmdc -i tmp.mmd -o "$outdir/$filename.svg" --no-sandbox
               echo "Generated $outdir/$filename.svg"
             fi
           done
