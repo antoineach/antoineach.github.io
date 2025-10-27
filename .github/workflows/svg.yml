@@ -1,0 +1,45 @@
+name: Generate Mermaid SVGs
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  render-mermaid:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install mermaid CLI
+        run: npm install -g @mermaid-js/mermaid-cli
+
+      - name: Generate SVGs from Mermaid in Markdown
+        run: |
+          find assets/img -type f -name "*.md" | while read -r file; do
+            mermaid_code=$(awk '/```mermaid/{flag=1;next}/```/{flag=0}flag' "$file")
+            if [ -n "$mermaid_code" ]; then
+              filename=$(basename "${file%.md}")
+              filedir=$(dirname "$file")
+              outdir="$filedir"
+              echo "$mermaid_code" > tmp.mmd
+              npx mmdc -i tmp.mmd -o "$outdir/$filename.svg"
+              echo "Generated $outdir/$filename.svg"
+            fi
+          done
+          rm -f tmp.mmd
+
+      - name: Commit and push SVGs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add assets/img/**/*.svg || true
+          git commit -m "Auto-generate Mermaid SVGs" || echo "No changes"
+          git push
