@@ -25,7 +25,7 @@ Commençons par l'architecture globale avant de détailler chaque composant.
 
 ## Architecture Globale
 
-{% include figure.liquid path="assets/img/pointTransformerv2/main_architecture.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/main_architecture.svg" class="img-fluid rounded z-depth-1" %}
 
 PTv2 suit une architecture U-Net avec :
 
@@ -81,7 +81,7 @@ Linear(in_features=64, out_features=8)
 
 ### L'innovation GroupedLinear
 
-{% include figure.liquid path="assets/img/pointTransformerv2/groupedLinear.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/groupedLinear.svg" class="img-fluid rounded z-depth-1" %}
 
 **GroupedLinear** remplace la matrice de poids par un **vecteur de poids partagé** :
 
@@ -171,7 +171,7 @@ Cette contrainte :
 
 `GroupedVectorAttention` est le cœur de PTv2, avec plusieurs améliorations par rapport à PTv1.
 
-{% include figure.liquid path="assets/img/pointTransformerv2/groupedVectorAttention.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/groupedVectorAttention.svg" class="img-fluid rounded z-depth-1" %}
 
 **Différences clés avec PTv1:**
 
@@ -453,7 +453,7 @@ Voici la section comparative enrichie pour GroupedVectorAttention :
 
 `GroupedVectorAttention` est le cœur de PTv2, avec plusieurs améliorations par rapport à PTv1.
 
-{% include figure.liquid path="assets/img/pointTransformerv2/groupedVectorAttention.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/groupedVectorAttention.svg" class="img-fluid rounded z-depth-1" %}
 
 ### Comparaison détaillée avec PTv1
 
@@ -780,7 +780,7 @@ PTv2 améliore donc **significativement** l'attention locale tout en réduisant 
 
 Le `Block` de PTv2 encapsule `GroupedVectorAttention` dans une structure résiduelle similaire à ResNet, avec une innovation clé : **DropPath**.
 
-{% include figure.liquid path="assets/img/pointTransformerv2/block.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/block.svg" class="img-fluid rounded z-depth-1" %}
 
 ### Comparaison avec PTv1
 
@@ -911,7 +911,7 @@ drop_path_rates = linspace(0, 0.3, sum(enc_depths))
 
 `BlockSequence` empile plusieurs `Block` et introduit une optimisation majeure : **partage du reference_index**.
 
-{% include figure.liquid path="assets/img/pointTransformerv2/blockSequence.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/blockSequence.svg" class="img-fluid rounded z-depth-1" %}
 
 ### Innovation Clé : K-NN Calculé Une Seule Fois
 
@@ -1130,7 +1130,7 @@ Les voisins géométriques restent identiques, mais leurs **features évoluent**
 
 Avant de downsampler, PTv2 applique un `GVAPatchEmbed` qui enrichit les features à pleine résolution.
 
-{% include figure.liquid path="assets/img/pointTransformerv2/GVAPatchEmbed.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/GVAPatchEmbed.svg" class="img-fluid rounded z-depth-1" %}
 
 ### Rôle
 
@@ -1223,7 +1223,7 @@ Avec `depth=1`, c'est modeste, mais déjà bénéfique. Certaines variantes util
 
 `GridPool` est l'une des innovations majeures de PTv2, remplaçant le **Furthest Point Sampling (FPS)** de PTv1 par une approche basée sur la **voxelisation**.
 
-{% include figure.liquid path="assets/img/pointTransformerv2/gridPool.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/gridPool.svg" class="img-fluid rounded z-depth-1" %}
 
 ### Comparaison : FPS vs Grid Pooling
 
@@ -1831,7 +1831,7 @@ upsampled = feat_low_res[cluster_inverse]  # Lookup instantané !
 
 `UnpoolWithSkip` est le pendant de `GridPool` dans le décodeur, permettant de remonter en résolution tout en fusionnant l'information multi-échelle via les skip connections.
 
-{% include figure.liquid path="assets/img/pointTransformerv2/unpoolWithSkip.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/unpoolWithSkip.svg" class="img-fluid rounded z-depth-1" %}
 
 ### Comparaison : Interpolation vs Map Unpooling
 
@@ -2325,7 +2325,7 @@ cluster[point_i] = voxel_id  # Toujours le même
 
 ### Encoder
 
-{% include figure.liquid path="assets/img/pointTransformerv2/encoder.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/encoder.svg" class="img-fluid rounded z-depth-1" %}
 
 ```python
 class Encoder:
@@ -2356,7 +2356,7 @@ Output: Nvoxel points, embed_ch
 
 ### Decoder
 
-{% include figure.liquid path="assets/img/pointTransformerv2/decoder.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/decoder.svg" class="img-fluid rounded z-depth-1" %}
 
 ```python
 class Decoder:
@@ -2450,4 +2450,5 @@ Voilà ! Nous avons couvert toute l'architecture de PTv2 :
 ✅ **GridPool** : Downsampling par voxelisation  
 ✅ **UnpoolWithSkip** : Map unpooling + skip connections  
 ✅ **Encoder & Decoder** : Architecture U-Net complète  
+
 
