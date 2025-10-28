@@ -38,17 +38,6 @@ ninja.data = [{
         section: "Posts",
         handler: () => {
           
-            window.location.href = "/blog/2025/pointTransformerv2_en/";
-          
-        },
-      },{id: "post-point-transformer-v2-architecture-and-implementation-details-en",
-        
-          title: "Point Transformer v2: Architecture and Implementation Details en",
-        
-        description: "Detailed analysis of the Point Transformer v2 architecture for point-cloud segmentation and classification",
-        section: "Posts",
-        handler: () => {
-          
             window.location.href = "/blog/2025/pointTransformerv2/";
           
         },
