@@ -24,7 +24,7 @@ Avant de plonger dans l'architecture globale, commençons par comprendre deux in
 
 ## Architecture Globale
 
-{% include figure.liquid path="assets/img/poinTransformerv2/architecture.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/architecture.svg" class="img-fluid rounded z-depth-1" %}
 
 PTv2 suit une architecture U-Net avec :
 
@@ -80,7 +80,7 @@ Linear(in_features=64, out_features=8)
 
 ### L'innovation GroupedLinear
 
-{% include figure.liquid path="assets/img/poinTransformerv2/groupedLinear.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/groupedLinear.svg" class="img-fluid rounded z-depth-1" %}
 
 **GroupedLinear** remplace la matrice de poids par un **vecteur de poids partagé** :
 
@@ -160,7 +160,7 @@ GroupedLinear force le modèle à utiliser les mêmes poids pour tous les groupe
 
 `GroupedVectorAttention` est le cœur de PTv2, avec plusieurs améliorations par rapport à PTv1.
 
-{% include figure.liquid path="assets/img/poinTransformerv2/groupedVectorAttention.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/groupedVectorAttention.svg" class="img-fluid rounded z-depth-1" %}
 
 ### Comparaison détaillée avec PTv1
 
@@ -470,7 +470,7 @@ attention_scores = GroupedLinear → BatchNorm → ReLU → Linear
 
 Le `Block` de PTv2 encapsule `GroupedVectorAttention` dans une structure résiduelle similaire à ResNet, avec une innovation clé : **DropPath**.
 
-{% include figure.liquid path="assets/img/poinTransformerv2/block.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/block.svg" class="img-fluid rounded z-depth-1" %}
 
 ### Comparaison avec PTv1
 
@@ -580,7 +580,7 @@ Input → [Block1] → [Block2] → [Block3] → [Block4] → ... → [Block11] 
 
 `BlockSequence` empile plusieurs `Block` et introduit une optimisation majeure : **partage du reference_index**.
 
-{% include figure.liquid path="assets/img/poinTransformerv2/blockSequence.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/blockSequence.svg" class="img-fluid rounded z-depth-1" %}
 
 ### Innovation Clé : K-NN Calculé Une Seule Fois
 
@@ -689,7 +689,7 @@ points = BlockSequence(points)         # Nouvelles positions → nouveau K-NN �
 
 Avant de downsampler, PTv2 applique un `GVAPatchEmbed` qui enrichit les features à pleine résolution.
 
-{% include figure.liquid path="assets/img/poinTransformerv2/GVAPatchEmbed.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/GVAPatchEmbed.svg" class="img-fluid rounded z-depth-1" %}
 
 ### Rôle
 
@@ -713,7 +713,7 @@ Output: (N, embed_channels)
 
 `GridPool` est l'une des innovations majeures de PTv2, remplaçant le **Furthest Point Sampling (FPS)** de PTv1 par une approche basée sur la **voxelisation**.
 
-{% include figure.liquid path="assets/img/poinTransformerv2/gridPool.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/gridPool.svg" class="img-fluid rounded z-depth-1" %}
 
 
 
@@ -923,7 +923,7 @@ upsampled = feat_low_res[cluster_inverse]  # Lookup instantané !
 
 `UnpoolWithSkip` est le pendant de `GridPool` dans le décodeur, permettant de remonter en résolution tout en fusionnant l'information multi-échelle via les skip connections.
 
-{% include figure.liquid path="assets/img/poinTransformerv2/unpoolWithSkip.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/unpoolWithSkip.svg" class="img-fluid rounded z-depth-1" %}
 
 
 ## Problème avec K-NN Interpolation (PTv1)
@@ -1059,7 +1059,7 @@ return [coord_skip, feat_fused, offset_skip]
 
 ### Encoder
 
-{% include figure.liquid path="assets/img/poinTransformerv2/encoder.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/encoder.svg" class="img-fluid rounded z-depth-1" %}
 
 ```python
 class Encoder:
@@ -1076,7 +1076,7 @@ class Encoder:
 
 ### Decoder
 
-{% include figure.liquid path="assets/img/poinTransformerv2/decoder.svg" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/decoder.svg" class="img-fluid rounded z-depth-1" %}
 
 ```python
 class Decoder:
@@ -1099,11 +1099,12 @@ class Decoder:
 ### Mémoire
 
 
-{% include figure.liquid path="assets/img/poinTransformerv2/ptv2_time_diff.png" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/ptv2_time_diff.png" class="img-fluid rounded z-depth-1" %}
 
 ### Précision
 
-{% include figure.liquid path="assets/img/poinTransformerv2/ptv2_s3dis_miou.png" class="img-fluid rounded z-depth-1" %}
+{% include figure.liquid path="assets/img/poinTransformerV2/ptv2_s3dis_miou.png" class="img-fluid rounded z-depth-1" %}
 
 
 ---
+
