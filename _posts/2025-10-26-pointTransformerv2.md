@@ -25,11 +25,7 @@ Before diving into the overall architecture, we first explain two fundamental in
 
 ## Overall Architecture
 
-{% include figure.liquid
-   path="assets/img/poinTransformerV2/main_architecture.svg"
-   class="img-fluid rounded z-depth-1"
-   style="height: 3rem;" %}
-
+{% include figure.liquid path="assets/img/poinTransformerV2/main_architecture.svg" class="img-fluid rounded z-depth-1" width="100%" %}
 PTv2 follows a U-Net architecture with:
 
 **Encoder (Downsampling):**
@@ -1061,6 +1057,7 @@ class Decoder:
 {% include figure.liquid path="assets/img/poinTransformerV2/ptv2_s3dis_miou.png" class="img-fluid rounded z-depth-1" %}
 
 ---
+
 
 
 
