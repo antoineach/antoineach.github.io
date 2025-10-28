@@ -26,7 +26,7 @@ Commençons par l'architecture globale avant de détailler chaque composant.
 ## Architecture Globale
 
 {% include figure.liquid 
-   path="assets/img/pointTransformerv2/main_architecture.svg" 
+   path="assets/img/poinTransformerv2/main_architecture.svg" 
    class="img-fluid rounded z-depth-1" 
    style="height:400px; object-fit:contain;"
 %}
@@ -2454,6 +2454,7 @@ Voilà ! Nous avons couvert toute l'architecture de PTv2 :
 ✅ **GridPool** : Downsampling par voxelisation  
 ✅ **UnpoolWithSkip** : Map unpooling + skip connections  
 ✅ **Encoder & Decoder** : Architecture U-Net complète  
+
 
 
 
