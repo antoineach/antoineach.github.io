@@ -30,7 +30,18 @@ ninja.data = [{
           handler: () => {
             window.location.href = "/repositories/";
           },
-        },{id: "post-point-transformer-v2-architecture-and-implementation-details",
+        },{id: "post-",
+        
+          title: "",
+        
+        description: "",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2025/2025-10-26-pointTransformerv2_en/";
+          
+        },
+      },{id: "post-point-transformer-v2-architecture-and-implementation-details",
         
           title: "Point Transformer v2: Architecture and Implementation Details",
         

@@ -1,0 +1,511 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN" "http://www.w3.org/TR/REC-html40/loose.dtd"> <html><body> <h2 id="overall-architecture">Overall Architecture</h2> <figure> <picture> <img src="/assets/img/poinTransformerV2/main_architecture.svg" class="img-fluid rounded z-depth-1" width="100%" height="auto" loading="lazy" onerror="this.onerror=null; $('.responsive-img-srcset').remove();"> </picture> </figure> <p>PTv2 follows a U-Net architecture with:</p> <p><strong>Encoder (Downsampling):</strong></p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Input (N points, in_channels)
+    ↓ GVAPatchEmbed
+N points, 48 channels
+    ↓ Encoder 1 (GridPool)
+N1 points, 96 channels
+    ↓ Encoder 2 (GridPool)
+N2 points, 192 channels
+    ↓ Encoder 3 (GridPool)
+N3 points, 384 channels
+    ↓ Encoder 4 (GridPool)
+N4 points, 512 channels [BOTTLENECK]
+</code></pre></div></div> <p><strong>Decoder (Upsampling):</strong></p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>N4 points, 512 channels
+    ↓ Decoder 4 (Unpool + skip)
+N3 points, 384 channels
+    ↓ Decoder 3 (Unpool + skip)
+N2 points, 192 channels
+    ↓ Decoder 2 (Unpool + skip)
+N1 points, 96 channels
+    ↓ Decoder 1 (Unpool + skip)
+N points, 48 channels
+    ↓ Segmentation Head
+N points, num_classes
+</code></pre></div></div> <p><strong>Key points:</strong></p> <ul> <li>Each <strong>Encoder</strong> reduces the number of points via <strong>GridPool</strong> (voxelization).</li> <li>Each <strong>Decoder</strong> increases resolution via <strong>Map Unpooling</strong> + skip connection.</li> <li> <strong>Clusters</strong> store voxelization mapping for unpooling.</li> <li> <strong>No Furthest Point Sampling</strong> → much faster.</li> </ul> <hr> <h2 id="groupedlinear-smart-parameter-reduction">GroupedLinear: Smart Parameter Reduction</h2> <h3 id="the-problem-with-classic-linear">The problem with classic Linear</h3> <p>In a deep network, generating attention weights via standard Linear layers quickly accumulates parameters:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Classic Linear to generate 8 attention weights from 64 features
+</span><span class="nc">Linear</span><span class="p">(</span><span class="n">in_features</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">out_features</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+<span class="c1"># Parameters: 64 × 8 = 512 weights + 8 bias = 520 parameters
+</span></code></pre></div></div> <h3 id="the-groupedlinear-innovation">The GroupedLinear innovation</h3> <figure> <picture> <img src="/assets/img/poinTransformerV2/groupedLinear.svg" class="img-fluid rounded z-depth-1" width="100%" height="auto" loading="lazy" onerror="this.onerror=null; $('.responsive-img-srcset').remove();"> </picture> </figure> <p><strong>GroupedLinear</strong> replaces the weight matrix with a <strong>shared weight vector</strong>:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># GroupedLinear
+</span><span class="n">weight</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">64</span><span class="p">)</span>  <span class="c1"># A SINGLE vector instead of a matrix
+# Parameters: 64 (no bias)
+</span></code></pre></div></div> <h3 id="step-by-step-operation">Step-by-step operation</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">):</span>
+    <span class="c1"># input: (N, in_features) = (N, 64)
+</span>    <span class="c1"># weight: (1, in_features) = (1, 64)
+</span>    
+    <span class="c1"># Step 1: Element-wise multiplication
+</span>    <span class="n">temp</span> <span class="o">=</span> <span class="nb">input</span> <span class="o">*</span> <span class="n">weight</span>  <span class="c1"># (N, in_features)
+</span>    
+    <span class="c1"># Step 2: Reshape into groups
+</span>    <span class="n">temp</span> <span class="o">=</span> <span class="n">temp</span><span class="p">.</span><span class="nf">reshape</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">groups</span><span class="p">,</span> <span class="n">in_features</span><span class="o">/</span><span class="n">groups</span><span class="p">)</span>
+    <span class="c1"># temp: (N, groups, in_features/groups)
+</span>    
+    <span class="c1"># Step 3: Sum per group
+</span>    <span class="n">output</span> <span class="o">=</span> <span class="n">temp</span><span class="p">.</span><span class="nf">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># (N, groups) = (N, out_features)
+</span>    
+    <span class="k">return</span> <span class="n">output</span>
+</code></pre></div></div> <h3 id="concrete-numeric-example">Concrete numeric example</h3> <p>Take <strong>N=1, in_features=8, groups=out_features=4</strong> for simplicity:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Input
+</span><span class="n">x</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>  <span class="c1"># (8,)
+</span>
+<span class="c1"># Weight (shared vector)
+</span><span class="n">w</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.9</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">,</span> <span class="mf">0.7</span><span class="p">]</span>  <span class="c1"># (8,)
+</span>
+<span class="c1"># Step 1: Element-wise multiplication
+</span><span class="n">temp</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="err">×</span><span class="mf">0.5</span><span class="p">,</span> <span class="mi">3</span><span class="err">×</span><span class="mf">1.0</span><span class="p">,</span> <span class="mi">1</span><span class="err">×</span><span class="mf">0.2</span><span class="p">,</span> <span class="mi">4</span><span class="err">×</span><span class="mf">0.8</span><span class="p">,</span> <span class="mi">5</span><span class="err">×</span><span class="mf">0.3</span><span class="p">,</span> <span class="mi">2</span><span class="err">×</span><span class="mf">0.9</span><span class="p">,</span> <span class="mi">3</span><span class="err">×</span><span class="mf">0.4</span><span class="p">,</span> <span class="mi">1</span><span class="err">×</span><span class="mf">0.7</span><span class="p">]</span>
+     <span class="o">=</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">3.2</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">,</span> <span class="mf">1.8</span><span class="p">,</span> <span class="mf">1.2</span><span class="p">,</span> <span class="mf">0.7</span><span class="p">]</span>
+
+<span class="c1"># Step 2: Reshape into 4 groups of 2 dimensions
+</span><span class="n">temp_grouped</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">],</span>     <span class="c1"># Group 0
+</span>    <span class="p">[</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">3.2</span><span class="p">],</span>     <span class="c1"># Group 1
+</span>    <span class="p">[</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">1.8</span><span class="p">],</span>     <span class="c1"># Group 2
+</span>    <span class="p">[</span><span class="mf">1.2</span><span class="p">,</span> <span class="mf">0.7</span><span class="p">]</span>      <span class="c1"># Group 3
+</span><span class="p">]</span>
+
+<span class="c1"># Step 3: Sum per group
+</span><span class="n">output</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="mf">1.0</span> <span class="o">+</span> <span class="mf">3.0</span> <span class="o">=</span> <span class="mf">4.0</span><span class="p">,</span>    <span class="c1"># Group 0
+</span>    <span class="mf">0.2</span> <span class="o">+</span> <span class="mf">3.2</span> <span class="o">=</span> <span class="mf">3.4</span><span class="p">,</span>    <span class="c1"># Group 1
+</span>    <span class="mf">1.5</span> <span class="o">+</span> <span class="mf">1.8</span> <span class="o">=</span> <span class="mf">3.3</span><span class="p">,</span>    <span class="c1"># Group 2
+</span>    <span class="mf">1.2</span> <span class="o">+</span> <span class="mf">0.7</span> <span class="o">=</span> <span class="mf">1.9</span>     <span class="c1"># Group 3
+</span><span class="p">]</span>
+<span class="c1"># Result: [4.0, 3.4, 3.3, 1.9]
+</span></code></pre></div></div> <h3 id="parameter-comparison">Parameter comparison</h3> <table> <thead> <tr> <th>Configuration</th> <th>Classic Linear</th> <th>GroupedLinear</th> <th>Reduction</th> </tr> </thead> <tbody> <tr> <td>64 → 8</td> <td>64×8 = <strong>512</strong> </td> <td><strong>64</strong></td> <td>8×</td> </tr> <tr> <td>128 → 16</td> <td>128×16 = <strong>2048</strong> </td> <td><strong>128</strong></td> <td>16×</td> </tr> <tr> <td>256 → 32</td> <td>256×32 = <strong>8192</strong> </td> <td><strong>256</strong></td> <td>32×</td> </tr> </tbody> </table> <p>GroupedLinear forces the model to use the same weights across groups, applied to different portions of the input.</p> <hr> <h2 id="groupedvectorattention-enriched-local-attention">GroupedVectorAttention: Enriched Local Attention</h2> <h3 id="overview">Overview</h3> <p><code class="language-plaintext highlighter-rouge">GroupedVectorAttention</code> is the core of PTv2. It includes several improvements over PTv1.</p> <figure> <picture> <img src="/assets/img/poinTransformerV2/groupedVectorAttention.svg" class="img-fluid rounded z-depth-1" width="100%" height="auto" loading="lazy" onerror="this.onerror=null; $('.responsive-img-srcset').remove();"> </picture> </figure> <h3 id="detailed-comparison-with-ptv1">Detailed comparison with PTv1</h3> <table> <thead> <tr> <th>Aspect</th> <th>PTv1 (PointTransformerLayer)</th> <th>PTv2 (GroupedVectorAttention)</th> </tr> </thead> <tbody> <tr> <td><strong>Q, K, V projections</strong></td> <td>Simple Linear</td> <td>Linear + <strong>BatchNorm1d + ReLU</strong> </td> </tr> <tr> <td><strong>Position encoding</strong></td> <td>Additive only</td> <td>Additive (+ optional multiplicative)</td> </tr> <tr> <td><strong>Position encoding on values</strong></td> <td>❌ No</td> <td>✅ <strong>Yes</strong> </td> </tr> <tr> <td><strong>Masking invalid neighbors</strong></td> <td>❌ No (assumes all valid)</td> <td>✅ <strong>Yes</strong> </td> </tr> <tr> <td><strong>Weight generation</strong></td> <td>Standard MLP (C×C/G params)</td> <td> <strong>GroupedLinear</strong> (C params only)</td> </tr> <tr> <td><strong>Normalization</strong></td> <td>After weight encoding</td> <td> <strong>Before and after</strong> attention</td> </tr> </tbody> </table> <h3 id="innovation-1-normalization-of-q-k-v-projections">Innovation 1: Normalization of Q, K, V projections</h3> <p><strong>PTv1:</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Simple projections without normalization
+</span><span class="n">self</span><span class="p">.</span><span class="n">linear_q</span> <span class="o">=</span> <span class="n">nn</span><span class="p">.</span><span class="nc">Linear</span><span class="p">(</span><span class="n">in_planes</span><span class="p">,</span> <span class="n">mid_planes</span><span class="p">)</span>
+<span class="n">self</span><span class="p">.</span><span class="n">linear_k</span> <span class="o">=</span> <span class="n">nn</span><span class="p">.</span><span class="nc">Linear</span><span class="p">(</span><span class="n">in_planes</span><span class="p">,</span> <span class="n">mid_planes</span><span class="p">)</span>
+<span class="n">self</span><span class="p">.</span><span class="n">linear_v</span> <span class="o">=</span> <span class="n">nn</span><span class="p">.</span><span class="nc">Linear</span><span class="p">(</span><span class="n">in_planes</span><span class="p">,</span> <span class="n">out_planes</span><span class="p">)</span>
+
+<span class="c1"># Usage
+</span><span class="n">query</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="nf">linear_q</span><span class="p">(</span><span class="n">feat</span><span class="p">)</span>  <span class="c1"># (N, C)
+</span><span class="n">key</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="nf">linear_k</span><span class="p">(</span><span class="n">feat</span><span class="p">)</span>    <span class="c1"># (N, C)
+</span><span class="n">value</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="nf">linear_v</span><span class="p">(</span><span class="n">feat</span><span class="p">)</span>  <span class="c1"># (N, C)
+</span></code></pre></div></div> <p><strong>PTv2:</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Projections with normalization and activation
+</span><span class="n">self</span><span class="p">.</span><span class="n">linear_q</span> <span class="o">=</span> <span class="n">nn</span><span class="p">.</span><span class="nc">Sequential</span><span class="p">(</span>
+    <span class="n">nn</span><span class="p">.</span><span class="nc">Linear</span><span class="p">(</span><span class="n">embed_channels</span><span class="p">,</span> <span class="n">embed_channels</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="n">qkv_bias</span><span class="p">),</span>
+    <span class="nc">PointBatchNorm</span><span class="p">(</span><span class="n">embed_channels</span><span class="p">),</span>  <span class="c1"># Normalization
+</span>    <span class="n">nn</span><span class="p">.</span><span class="nc">ReLU</span><span class="p">(</span><span class="n">inplace</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>            <span class="c1"># Activation
+</span><span class="p">)</span>
+<span class="c1"># Same for linear_k
+</span>
+<span class="c1"># Usage
+</span><span class="n">query</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="nf">linear_q</span><span class="p">(</span><span class="n">feat</span><span class="p">)</span>  <span class="c1"># (N, C) - normalized and activated
+</span></code></pre></div></div> <p><strong>Why it matters</strong></p> <p>Normalization of Q and K stabilizes training by avoiding extreme values in the Q-K relation.</p> <p><strong>Impact:</strong> Faster convergence and more stable training.</p> <hr> <h3 id="innovation-2-positional-encoding-on-the-values">Innovation 2: Positional Encoding on the Values</h3> <p><strong>PTv1:</strong> Positional encoding is added only to the Q-K relation.</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># PTv1 (simplified)
+</span><span class="n">relative_positions</span> <span class="o">=</span> <span class="n">neighbor_positions</span> <span class="o">-</span> <span class="n">query_position</span>  <span class="c1"># (N, K, 3)
+</span><span class="n">encoded_positions</span> <span class="o">=</span> <span class="nc">MLP</span><span class="p">(</span><span class="n">relative_positions</span><span class="p">)</span>               <span class="c1"># (N, K, out_dim)
+</span>
+<span class="c1"># Applied ONLY to Q-K relation
+</span><span class="n">relation_qk</span> <span class="o">=</span> <span class="p">(</span><span class="n">key</span> <span class="o">-</span> <span class="n">query</span><span class="p">)</span> <span class="o">+</span> <span class="n">encoded_positions</span>
+<span class="c1"># Values are NOT modified by geometry
+</span></code></pre></div></div> <p><strong>PTv2:</strong> The encoding is added to Q-K <strong>and</strong> to the values.</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># PTv2
+</span><span class="n">pe_bias</span> <span class="o">=</span> <span class="nc">MLP</span><span class="p">(</span><span class="n">relative_positions</span><span class="p">)</span>  <span class="c1"># (N, K, C)
+</span>
+<span class="c1"># On the Q-K relation (as in PTv1)
+</span><span class="n">relation_qk</span> <span class="o">=</span> <span class="p">(</span><span class="n">key</span> <span class="o">-</span> <span class="n">query</span><span class="p">)</span> <span class="o">+</span> <span class="n">pe_bias</span>
+
+<span class="c1"># NEW: also on the values!
+</span><span class="n">value</span> <span class="o">=</span> <span class="n">value</span> <span class="o">+</span> <span class="n">pe_bias</span>
+
+<span class="c1"># (values now contain geometric information)
+</span></code></pre></div></div> <hr> <h3 id="innovation-3-masking-invalid-neighbors">Innovation 3: Masking Invalid Neighbors</h3> <p><strong>Context: Fundamental difference between PTv1 and PTv2</strong></p> <h4 id="ptv1-k-nn-always-guarantees-k-neighbors">PTv1: K-NN always guarantees K neighbors</h4> <p>In PTv1 neighbors are found via <strong>K-Nearest Neighbors (K-NN)</strong>:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># PTv1 - In each PointTransformerLayer
+</span><span class="n">x_k</span> <span class="o">=</span> <span class="n">pointops</span><span class="p">.</span><span class="nf">queryandgroup</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">nsample</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">x_k</span><span class="p">,</span> <span class="bp">None</span><span class="p">,</span> <span class="n">o</span><span class="p">,</span> <span class="n">o</span><span class="p">,</span> <span class="n">use_xyz</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+<span class="c1"># Returns EXACTLY K neighbors (via K-NN search)
+</span></code></pre></div></div> <p>PTv1 therefore does not need masking. All K neighbors are valid (though some may be far).</p> <hr> <h4 id="ptv2-grid-pooling-can-yield--k-neighbors">PTv2: Grid Pooling can yield &lt; K neighbors</h4> <p>In PTv2 neighbors are determined by <strong>Grid Pooling</strong> (voxelization), which can produce regions with fewer than K points.</p> <p><strong>Reminder: What is Grid Pooling?</strong></p> <p><strong>Grid Pooling</strong> partitions space into <strong>voxels</strong> and aggregates all points in the same voxel.</p> <p>(ASCII art omitted here but same concept as original)</p> <p><strong>Consequence:</strong> After Grid Pooling some regions can be <strong>sparse</strong>.</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Configuration: K=8 neighbors requested
+
+Dense area:                  Sparse area (cloud border):
+    ◉  ◉  ◉                      ◉
+    ◉  ●  ◉                         
+    ◉  ◉  ◉                          ◉
+    
+Point ● has 8 neighbors ✓      Point ◉ has only 2 neighbors ✗
+</code></pre></div></div> <p><strong>How does PTv2 handle missing neighbors?</strong></p> <p>When performing K-NN on pooled voxels, if a voxel has fewer than K neighbors available, missing indices are marked with <strong>-1</strong>:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># PTv2 - K-NN on voxels after Grid Pooling
+</span><span class="n">reference_index</span> <span class="o">=</span> <span class="nf">knn_query</span><span class="p">(</span><span class="n">K</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">coord_pooled</span><span class="p">,</span> <span class="n">offset</span><span class="p">)</span>
+<span class="c1"># reference_index: (M, K)
+</span>
+<span class="c1"># Example for an isolated voxel
+</span><span class="n">reference_index</span><span class="p">[</span><span class="n">voxel_42</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="mi">15</span><span class="p">,</span> <span class="mi">23</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+<span class="c1">#                            ↑───↑   ↑──────────────────────↑
+#                            2 neighbors    6 invalid indices (-1)
+</span></code></pre></div></div> <p><strong>Why -1 and not fewer indices?</strong></p> <p>To keep a uniform shape <code class="language-plaintext highlighter-rouge">(M, K)</code> compatible with matrix operations:</p> <ul> <li>All tensors keep the same shape.</li> <li>Enables efficient GPU batching.</li> <li>Padding with -1 allows explicit masking.</li> </ul> <hr> <p><strong>PTv2 solution: Explicit Masking</strong></p> <p><strong>Step 1: Create the mask</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># reference_index contains -1 for invalid neighbors
+</span><span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">sign</span><span class="p">(</span><span class="n">reference_index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>  <span class="c1"># (M, K)
+</span>
+<span class="c1"># Behavior of sign(x+1):
+# If reference_index[i] = -1  → sign(-1+1) = sign(0) = 0  ← invalid
+# If reference_index[i] ≥ 0   → sign(≥1) = 1             ← valid
+</span></code></pre></div></div> <p><strong>Step 2: Apply on attention weights</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># In GroupedVectorAttention, after softmax
+</span><span class="n">attention_weights</span> <span class="o">=</span> <span class="nf">softmax</span><span class="p">(</span><span class="n">attention_scores</span><span class="p">)</span>  <span class="c1"># (M, K, groups)
+</span>
+<span class="c1"># Apply the mask
+</span><span class="n">attention_weights</span> <span class="o">=</span> <span class="n">attention_weights</span> <span class="o">*</span> <span class="n">mask</span><span class="p">.</span><span class="nf">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+<span class="c1"># Shape: (M, K, groups) × (M, K, 1) → (M, K, groups)
+</span></code></pre></div></div> <p><strong>Visualization:</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Before masking (after softmax over K neighbors)
+</span><span class="n">attention_weights</span><span class="p">[</span><span class="n">voxel_42</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">[</span><span class="mf">0.20</span><span class="p">,</span> <span class="mf">0.15</span><span class="p">,</span> <span class="mf">0.10</span><span class="p">,</span> <span class="p">...],</span>  <span class="c1"># Neighbor 15 (valid)
+</span>    <span class="p">[</span><span class="mf">0.18</span><span class="p">,</span> <span class="mf">0.12</span><span class="p">,</span> <span class="mf">0.09</span><span class="p">,</span> <span class="p">...],</span>  <span class="c1"># Neighbor 23 (valid)
+</span>    <span class="p">[</span><span class="mf">0.12</span><span class="p">,</span> <span class="mf">0.14</span><span class="p">,</span> <span class="mf">0.11</span><span class="p">,</span> <span class="p">...],</span>  <span class="c1"># Padding -1 (invalid but has weights!)
+</span>    <span class="p">[</span><span class="mf">0.11</span><span class="p">,</span> <span class="mf">0.13</span><span class="p">,</span> <span class="mf">0.10</span><span class="p">,</span> <span class="p">...],</span>  <span class="c1"># Padding -1 (invalid)
+</span>    <span class="p">[</span><span class="mf">0.10</span><span class="p">,</span> <span class="mf">0.12</span><span class="p">,</span> <span class="mf">0.12</span><span class="p">,</span> <span class="p">...],</span>  <span class="c1"># Padding -1 (invalid)
+</span>    <span class="p">[</span><span class="mf">0.09</span><span class="p">,</span> <span class="mf">0.11</span><span class="p">,</span> <span class="mf">0.13</span><span class="p">,</span> <span class="p">...],</span>  <span class="c1"># Padding -1 (invalid)
+</span>    <span class="p">[</span><span class="mf">0.10</span><span class="p">,</span> <span class="mf">0.12</span><span class="p">,</span> <span class="mf">0.18</span><span class="p">,</span> <span class="p">...],</span>  <span class="c1"># Padding -1 (invalid)
+</span>    <span class="p">[</span><span class="mf">0.10</span><span class="p">,</span> <span class="mf">0.11</span><span class="p">,</span> <span class="mf">0.17</span><span class="p">,</span> <span class="p">...],</span>  <span class="c1"># Padding -1 (invalid)
+</span><span class="p">]</span>
+
+<span class="c1"># After masking
+</span><span class="n">mask</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+
+<span class="n">attention_weights</span><span class="p">[</span><span class="n">voxel_42</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">[</span><span class="mf">0.20</span><span class="p">,</span> <span class="mf">0.15</span><span class="p">,</span> <span class="mf">0.10</span><span class="p">,</span> <span class="p">...],</span>  <span class="c1"># Neighbor 15 ✓
+</span>    <span class="p">[</span><span class="mf">0.18</span><span class="p">,</span> <span class="mf">0.12</span><span class="p">,</span> <span class="mf">0.09</span><span class="p">,</span> <span class="p">...],</span>  <span class="c1"># Neighbor 23 ✓
+</span>    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">...],</span>            <span class="c1"># Zeroed ✓
+</span>    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">...],</span>            <span class="c1"># Zeroed ✓
+</span>    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">...],</span>            <span class="c1"># Zeroed ✓
+</span>    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">...],</span>            <span class="c1"># Zeroed ✓
+</span>    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">...],</span>            <span class="c1"># Zeroed ✓
+</span>    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">...],</span>            <span class="c1"># Zeroed ✓
+</span><span class="p">]</span>
+</code></pre></div></div> <p><strong>Step 3: Aggregation</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Final aggregation (weighted sum)
+</span><span class="n">output</span> <span class="o">=</span> <span class="p">(</span><span class="n">value_grouped</span> <span class="o">*</span> <span class="n">attention_weights</span><span class="p">.</span><span class="nf">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)).</span><span class="nf">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="c1"># Invalid neighbors (weights=0) do not contribute ✓
+</span></code></pre></div></div> <hr> <p><strong>Why this is crucial</strong></p> <p><strong>Without masking</strong>, padding neighbors would contribute with <strong>arbitrary features</strong>.</p> <hr> <h3 id="innovation-4-groupedlinear-for-attention-weights">Innovation 4: GroupedLinear for Attention Weights</h3> <p>Instead of a standard MLP <code class="language-plaintext highlighter-rouge">Linear(C, groups)</code> with C×groups parameters, PTv2 uses <code class="language-plaintext highlighter-rouge">GroupedLinear(C, groups)</code> with only C parameters.</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># PTv1: Standard MLP
+</span><span class="n">self</span><span class="p">.</span><span class="n">linear_w</span> <span class="o">=</span> <span class="n">nn</span><span class="p">.</span><span class="nc">Sequential</span><span class="p">(</span>
+    <span class="n">nn</span><span class="p">.</span><span class="nc">Linear</span><span class="p">(</span><span class="n">mid_planes</span><span class="p">,</span> <span class="n">mid_planes</span> <span class="o">//</span> <span class="n">share_planes</span><span class="p">),</span>  <span class="c1"># C × C/G parameters
+</span>    <span class="bp">...</span>
+<span class="p">)</span>
+
+<span class="c1"># PTv2: with GroupedLinear
+</span><span class="n">self</span><span class="p">.</span><span class="n">weight_encoding</span> <span class="o">=</span> <span class="n">nn</span><span class="p">.</span><span class="nc">Sequential</span><span class="p">(</span>
+    <span class="nc">GroupedLinear</span><span class="p">(</span><span class="n">embed_channels</span><span class="p">,</span> <span class="n">groups</span><span class="p">,</span> <span class="n">groups</span><span class="p">),</span>  <span class="c1"># Only C parameters
+</span>    <span class="bp">...</span>
+<span class="p">)</span>
+</code></pre></div></div> <p><strong>Gain:</strong> fewer parameters to generate attention weights without performance loss.</p> <h3 id="innovation-5-normalization-architecture">Innovation 5: Normalization Architecture</h3> <p><strong>PTv1:</strong> Minimal normalization</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># PTv1 - No normalization on projections Q, K, V
+</span><span class="n">query</span> <span class="o">=</span> <span class="nc">Linear</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>  <span class="c1"># Not normalized
+</span><span class="n">key</span> <span class="o">=</span> <span class="nc">Linear</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+<span class="n">value</span> <span class="o">=</span> <span class="nc">Linear</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
+<span class="c1"># Normalization only in the weight MLP
+</span><span class="n">attention_scores</span> <span class="o">=</span> <span class="nc">MLP_with_BatchNorm</span><span class="p">(</span><span class="n">relation_qk</span><span class="p">)</span>
+</code></pre></div></div> <p><strong>PTv2:</strong> Extensive normalization</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># PTv2 - Normalization everywhere
+</span><span class="n">query</span> <span class="o">=</span> <span class="nc">Linear</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="err">→</span> <span class="n">BatchNorm</span> <span class="err">→</span> <span class="n">ReLU</span>  <span class="c1"># Normalized
+</span><span class="n">key</span> <span class="o">=</span> <span class="nc">Linear</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="err">→</span> <span class="n">BatchNorm</span> <span class="err">→</span> <span class="n">ReLU</span>
+<span class="n">value</span> <span class="o">=</span> <span class="nc">Linear</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>  <span class="c1"># No activation (remains linear)
+</span>
+<span class="c1"># Positional encoding also normalized
+</span><span class="n">pe_bias</span> <span class="o">=</span> <span class="nc">Linear</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span> <span class="err">→</span> <span class="n">BatchNorm</span> <span class="err">→</span> <span class="n">ReLU</span> <span class="err">→</span> <span class="n">Linear</span>
+
+<span class="c1"># Weight encoding also normalized
+</span><span class="n">attention_scores</span> <span class="o">=</span> <span class="n">GroupedLinear</span> <span class="err">→</span> <span class="n">BatchNorm</span> <span class="err">→</span> <span class="n">ReLU</span> <span class="err">→</span> <span class="n">Linear</span>
+</code></pre></div></div> <p><strong>Impact:</strong> More stable training, faster convergence, less sensitive to hyperparameters.</p> <hr> <h1 id="block-and-blocksequence-residual-architecture">Block and BlockSequence: Residual Architecture</h1> <h2 id="block-residual-block-with-droppath">Block: Residual Block with DropPath</h2> <p>The <code class="language-plaintext highlighter-rouge">Block</code> in PTv2 encapsulates <code class="language-plaintext highlighter-rouge">GroupedVectorAttention</code> in a residual structure similar to ResNet, with a key innovation: <strong>DropPath</strong>.</p> <figure> <picture> <img src="/assets/img/poinTransformerV2/block.svg" class="img-fluid rounded z-depth-1" width="100%" height="auto" loading="lazy" onerror="this.onerror=null; $('.responsive-img-srcset').remove();"> </picture> </figure> <h3 id="comparison-with-ptv1">Comparison with PTv1</h3> <table> <thead> <tr> <th>Aspect</th> <th>PTv1 (PointTransformerBlock)</th> <th>PTv2 (Block)</th> </tr> </thead> <tbody> <tr> <td><strong>Structure</strong></td> <td>Linear → Attention → Linear + Skip</td> <td>Linear → Attention → Linear + Skip</td> </tr> <tr> <td><strong>Regularization</strong></td> <td>Dropout only</td> <td> <strong>DropPath</strong> + Dropout</td> </tr> <tr> <td><strong>Normalization</strong></td> <td>3× BatchNorm</td> <td>3× BatchNorm (same)</td> </tr> <tr> <td><strong>Skip connection</strong></td> <td>Simple addition</td> <td>Addition with <strong>DropPath</strong> </td> </tr> </tbody> </table> <h3 id="detailed-architecture">Detailed architecture</h3> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Input features (N, C)
+    ↓
+[Linear + BatchNorm1d + ReLU]  ← Pre-activation (expansion)
+    ↓
+[GroupedVectorAttention]  ← Local attention over K neighbors
+    ↓
+[BatchNorm1d + ReLU]  ← Post-attention normalization
+    ↓
+[Linear + BatchNorm1d]  ← Projection
+    ↓
+[DropPath]  ← Stochastic regularization (NEW)
+    ↓
+[+ Skip Connection]  ← Residual connection
+    ↓
+[ReLU]  ← Final activation
+    ↓
+Output features (N, C)
+</code></pre></div></div> <h3 id="droppath-stochastic-depth">DropPath: Stochastic Depth</h3> <p><strong>DropPath</strong> (Stochastic Depth) is a regularization technique that <strong>drops entire paths</strong> in a residual network rather than individual neurons.</p> <p><strong>Classic Dropout vs DropPath:</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Classic dropout (acts on features)
+</span><span class="k">def</span> <span class="nf">dropout</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="mf">0.5</span><span class="p">):</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="nf">random</span><span class="p">(</span><span class="n">x</span><span class="p">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">p</span>  <span class="c1"># Random per-element mask
+</span>    <span class="k">return</span> <span class="n">x</span> <span class="o">*</span> <span class="n">mask</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">p</span><span class="p">)</span>
+
+<span class="n">output</span> <span class="o">=</span> <span class="n">x</span> <span class="o">+</span> <span class="nf">dropout</span><span class="p">(</span><span class="nf">f</span><span class="p">(</span><span class="n">x</span><span class="p">))</span>
+<span class="c1"># Some features of f(x) are zeroed
+</span>
+
+<span class="c1"># DropPath (acts on entire path)
+</span><span class="k">def</span> <span class="nf">drop_path</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="mf">0.1</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">training</span> <span class="ow">and</span> <span class="nf">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">p</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">0</span>  <span class="c1"># Entire path ignored
+</span>    <span class="k">return</span> <span class="n">x</span>
+
+<span class="n">output</span> <span class="o">=</span> <span class="n">x</span> <span class="o">+</span> <span class="nf">drop_path</span><span class="p">(</span><span class="nf">f</span><span class="p">(</span><span class="n">x</span><span class="p">))</span>
+<span class="c1"># Either all of f(x) is kept or all is ignored
+</span></code></pre></div></div> <p><strong>Practical behavior</strong></p> <p>During training with <code class="language-plaintext highlighter-rouge">drop_path_rate</code> (typically 0.1), a block may be skipped entirely:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Without DropPath (PTv1)
+</span><span class="n">feat_transformed</span> <span class="o">=</span> <span class="n">Linear</span> <span class="err">→</span> <span class="n">Attention</span> <span class="err">→</span> <span class="n">Linear</span>
+<span class="n">output</span> <span class="o">=</span> <span class="n">identity</span> <span class="o">+</span> <span class="n">feat_transformed</span>  <span class="c1"># Always computed
+</span>
+<span class="c1"># With DropPath (PTv2)
+</span><span class="n">feat_transformed</span> <span class="o">=</span> <span class="n">Linear</span> <span class="err">→</span> <span class="n">Attention</span> <span class="err">→</span> <span class="n">Linear</span>
+
+<span class="k">if</span> <span class="n">training</span> <span class="ow">and</span> <span class="nf">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">drop_path_rate</span><span class="p">:</span>
+    <span class="n">output</span> <span class="o">=</span> <span class="n">identity</span>  <span class="c1"># feat_transformed fully skipped
+</span><span class="k">else</span><span class="p">:</span>
+    <span class="n">output</span> <span class="o">=</span> <span class="n">identity</span> <span class="o">+</span> <span class="n">feat_transformed</span>
+
+<span class="c1"># At inference
+</span><span class="n">output</span> <span class="o">=</span> <span class="n">identity</span> <span class="o">+</span> <span class="n">feat_transformed</span>  <span class="c1"># Always active
+</span></code></pre></div></div> <p><strong>Visualization on a 12-block network</strong></p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>With drop_path_rate = 0.1
+
+Training iteration 1:
+Input → [Block1] → [Block2] → [SKIP] → [Block4] → ... → [SKIP] → [Block12]
+        ✓          ✓          ✗          ✓              ✗          ✓
+        (~10 active blocks)
+
+Training iteration 2:
+Input → [Block1] → [SKIP] → [Block3] → [Block4] → ... → [Block11] → [Block12]
+        ✓          ✗        ✓          ✓                  ✓          ✓
+        (~11 active blocks)
+
+Inference:
+Input → [Block1] → [Block2] → [Block3] → [Block4] → ... → [Block11] → [Block12]
+        ✓          ✓          ✓          ✓                  ✓          ✓
+        (all 12 blocks active)
+</code></pre></div></div> <p><strong>However, in PTv2 the <code class="language-plaintext highlighter-rouge">drop_path_rate</code> is implemented but set to 0.0. In other words it is not used.</strong></p> <h2 id="blocksequence-reuse-of-k-nn">BlockSequence: Reuse of K-NN</h2> <p><code class="language-plaintext highlighter-rouge">BlockSequence</code> stacks several <code class="language-plaintext highlighter-rouge">Block</code> modules and introduces a major optimization: <strong>sharing the reference_index</strong>.</p> <figure> <picture> <img src="/assets/img/poinTransformerV2/blockSequence.svg" class="img-fluid rounded z-depth-1" width="100%" height="auto" loading="lazy" onerror="this.onerror=null; $('.responsive-img-srcset').remove();"> </picture> </figure> <h3 id="key-innovation-k-nn-computed-once">Key innovation: K-NN computed once</h3> <p><strong>PTv1 problem:</strong></p> <p>In PTv1 each <code class="language-plaintext highlighter-rouge">PointTransformerLayer</code> recomputes K nearest neighbors via K-NN:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># PTv1 - In PointTransformerLayer.forward()
+</span><span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">pxo</span><span class="p">):</span>
+    <span class="n">p</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">o</span> <span class="o">=</span> <span class="n">pxo</span>
+    
+    <span class="c1"># K-NN computed AT EACH LAYER
+</span>    <span class="n">x_k</span> <span class="o">=</span> <span class="n">pointops</span><span class="p">.</span><span class="nf">queryandgroup</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">nsample</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">x_k</span><span class="p">,</span> <span class="bp">None</span><span class="p">,</span> <span class="n">o</span><span class="p">,</span> <span class="n">o</span><span class="p">,</span> <span class="n">use_xyz</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+    <span class="n">x_v</span> <span class="o">=</span> <span class="n">pointops</span><span class="p">.</span><span class="nf">queryandgroup</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">nsample</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">x_v</span><span class="p">,</span> <span class="bp">None</span><span class="p">,</span> <span class="n">o</span><span class="p">,</span> <span class="n">o</span><span class="p">,</span> <span class="n">use_xyz</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+    <span class="c1"># ...
+</span></code></pre></div></div> <p>For a block with 6 layers, K-NN is computed <strong>6 times</strong>.</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Block with 6 PTv1 layers:
+Layer 1: K-NN (N points, K=16 neighbors) → O(N log N)
+Layer 2: K-NN (N points, K=16 neighbors) → O(N log N)
+...
+Total cost: 6 × O(N log N)
+</code></pre></div></div> <p><strong>PTv2 solution:</strong></p> <p>In PTv2, <code class="language-plaintext highlighter-rouge">BlockSequence</code> computes K-NN <strong>once</strong> at the start. All <code class="language-plaintext highlighter-rouge">Block</code>s share the same <code class="language-plaintext highlighter-rouge">reference_index</code>:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># PTv2 - In BlockSequence.forward()
+</span><span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">points</span><span class="p">):</span>
+    <span class="n">coord</span><span class="p">,</span> <span class="n">feat</span><span class="p">,</span> <span class="n">offset</span> <span class="o">=</span> <span class="n">points</span>
+    
+    <span class="c1"># K-NN computed ONCE at the beginning
+</span>    <span class="n">reference_index</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">pointops</span><span class="p">.</span><span class="nf">knn_query</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">neighbours</span><span class="p">,</span> <span class="n">coord</span><span class="p">,</span> <span class="n">offset</span><span class="p">)</span>
+    <span class="c1"># reference_index: (N, K) - indices of K neighbors per point
+</span>    
+    <span class="c1"># All blocks share reference_index
+</span>    <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">self</span><span class="p">.</span><span class="n">blocks</span><span class="p">:</span>
+        <span class="n">points</span> <span class="o">=</span> <span class="nf">block</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">reference_index</span><span class="p">)</span>  <span class="c1"># No recalculation!
+</span>    
+    <span class="k">return</span> <span class="n">points</span>
+</code></pre></div></div> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Block with 6 PTv2 layers:
+K-NN (once): O(N log N)
+Layer 1: uses reference_index → O(1) lookup
+Layer 2: uses reference_index → O(1) lookup
+...
+Total cost: O(N log N)  ← 6× faster
+</code></pre></div></div> <h3 id="why-this-is-valid">Why this is valid?</h3> <p><strong>Question:</strong> Can the same neighbors be reused across layers?</p> <p><strong>Answer:</strong> <strong>YES</strong>, because in <code class="language-plaintext highlighter-rouge">BlockSequence</code> the <strong>positions do not change</strong>.</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># In Block.forward()
+</span><span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">points</span><span class="p">,</span> <span class="n">reference_index</span><span class="p">):</span>
+    <span class="n">coord</span><span class="p">,</span> <span class="n">feat</span><span class="p">,</span> <span class="n">offset</span> <span class="o">=</span> <span class="n">points</span>
+    
+    <span class="c1"># coord (positions) remain UNCHANGED across the block
+</span>    <span class="n">feat</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="nf">fc1</span><span class="p">(</span><span class="n">feat</span><span class="p">)</span>  <span class="c1"># Only features change
+</span>    <span class="n">feat</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="nf">attn</span><span class="p">(</span><span class="n">feat</span><span class="p">,</span> <span class="n">coord</span><span class="p">,</span> <span class="n">reference_index</span><span class="p">)</span>  <span class="c1"># coord fixed
+</span>    <span class="n">feat</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="nf">fc3</span><span class="p">(</span><span class="n">feat</span><span class="p">)</span>
+    <span class="c1"># ...
+</span>    
+    <span class="k">return</span> <span class="p">[</span><span class="n">coord</span><span class="p">,</span> <span class="n">feat</span><span class="p">,</span> <span class="n">offset</span><span class="p">]</span>  <span class="c1"># coord identical in output
+</span></code></pre></div></div> <p>3D positions (<code class="language-plaintext highlighter-rouge">coord</code>) are constant in a <code class="language-plaintext highlighter-rouge">BlockSequence</code>. Only features evolve. The K nearest neighbors remain geometrically identical.</p> <p><strong>When must K-NN be recomputed:</strong></p> <p>Positions change only at level transitions (downsampling/upsampling):</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Encoder
+</span><span class="n">points</span> <span class="o">=</span> <span class="nc">BlockSequence</span><span class="p">(</span><span class="n">points</span><span class="p">)</span>  <span class="c1"># Positions fixed, K-NN shared ✓
+</span><span class="n">points</span> <span class="o">=</span> <span class="nc">GridPool</span><span class="p">(</span><span class="n">points</span><span class="p">)</span>        <span class="c1"># Positions change (downsampling) ✗
+</span><span class="n">points</span> <span class="o">=</span> <span class="nc">BlockSequence</span><span class="p">(</span><span class="n">points</span><span class="p">)</span>  <span class="c1"># New positions → new K-NN ✓
+</span>
+<span class="c1"># Decoder
+</span><span class="n">points</span> <span class="o">=</span> <span class="nc">UnpoolWithSkip</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">skip</span><span class="p">)</span>  <span class="c1"># Positions change (upsampling) ✗
+</span><span class="n">points</span> <span class="o">=</span> <span class="nc">BlockSequence</span><span class="p">(</span><span class="n">points</span><span class="p">)</span>         <span class="c1"># New positions → new K-NN ✓
+</span></code></pre></div></div> <hr> <h2 id="gvapatchembed-initial-embedding">GVAPatchEmbed: Initial Embedding</h2> <p>Before downsampling, PTv2 applies a <code class="language-plaintext highlighter-rouge">GVAPatchEmbed</code> that enriches features at full resolution.</p> <figure> <picture> <img src="/assets/img/poinTransformerV2/GVAPatchEmbed.svg" class="img-fluid rounded z-depth-1" width="100%" height="auto" loading="lazy" onerror="this.onerror=null; $('.responsive-img-srcset').remove();"> </picture> </figure> <h3 id="role">Role</h3> <p><strong>GVAPatchEmbed</strong> = Linear projection + BlockSequence (without downsampling)</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">Input</span><span class="p">:</span> <span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">in_channels</span><span class="p">)</span>
+    <span class="err">↓</span>
+<span class="n">Linear</span> <span class="o">+</span> <span class="n">BatchNorm1d</span> <span class="o">+</span> <span class="n">ReLU</span>
+    <span class="err">↓</span>
+<span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">embed_channels</span><span class="p">)</span>
+    <span class="err">↓</span>
+<span class="nc">BlockSequence </span><span class="p">(</span><span class="n">depth</span> <span class="n">blocks</span><span class="p">)</span>
+    <span class="err">↓</span>
+<span class="n">Output</span><span class="p">:</span> <span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">embed_channels</span><span class="p">)</span>
+</code></pre></div></div> <h1 id="gridpool-voxel-based-downsampling">GridPool: Voxel-based Downsampling</h1> <h2 id="overview-1">Overview</h2> <p><code class="language-plaintext highlighter-rouge">GridPool</code> is a major PTv2 innovation. It replaces <strong>Furthest Point Sampling (FPS)</strong> used in PTv1 with a voxelization-based approach.</p> <figure> <picture> <img src="/assets/img/poinTransformerV2/gridPool.svg" class="img-fluid rounded z-depth-1" width="100%" height="auto" loading="lazy" onerror="this.onerror=null; $('.responsive-img-srcset').remove();"> </picture> </figure> <h4 id="voxelization">Voxelization</h4> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Normalize coordinates relative to the start of each cloud
+</span><span class="n">coord_normalized</span> <span class="o">=</span> <span class="n">coord</span> <span class="o">-</span> <span class="n">start</span><span class="p">[</span><span class="n">batch</span><span class="p">]</span>  <span class="c1"># (N, 3)
+</span>
+<span class="c1"># Assign to a grid with voxels of size grid_size
+</span><span class="n">cluster</span> <span class="o">=</span> <span class="nf">voxel_grid</span><span class="p">(</span>
+    <span class="n">pos</span><span class="o">=</span><span class="n">coord_normalized</span><span class="p">,</span> 
+    <span class="n">size</span><span class="o">=</span><span class="n">grid_size</span><span class="p">,</span>  <span class="c1"># e.g. 0.06m
+</span>    <span class="n">batch</span><span class="o">=</span><span class="n">batch</span><span class="p">,</span>
+    <span class="n">start</span><span class="o">=</span><span class="mi">0</span>
+<span class="p">)</span>
+<span class="c1"># cluster: (N,) - voxel ID per point
+</span></code></pre></div></div> <p><strong>Example with grid_size=1.0:</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Points after normalization
+</span><span class="n">points</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">[</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">],</span>  <span class="c1"># Voxel (0, 0, 0)
+</span>    <span class="p">[</span><span class="mf">0.8</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">],</span>  <span class="c1"># Voxel (0, 0, 0)
+</span>    <span class="p">[</span><span class="mf">1.2</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">],</span>  <span class="c1"># Voxel (1, 0, 0)
+</span>    <span class="p">[</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">1.8</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">],</span>  <span class="c1"># Voxel (1, 1, 0)
+</span>    <span class="p">[</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">,</span> <span class="mf">0.9</span><span class="p">],</span>  <span class="c1"># Voxel (0, 1, 0)
+</span><span class="p">]</span>
+
+<span class="c1"># Voxel ID calculation
+</span><span class="n">voxel_id</span> <span class="o">=</span> <span class="nf">floor</span><span class="p">(</span><span class="n">coord</span> <span class="o">/</span> <span class="n">grid_size</span><span class="p">)</span>
+
+<span class="n">cluster</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="mi">0</span><span class="p">,</span>  <span class="c1"># (0,0,0) → unique voxel ID
+</span>    <span class="mi">0</span><span class="p">,</span>  <span class="c1"># (0,0,0) → same voxel
+</span>    <span class="mi">1</span><span class="p">,</span>  <span class="c1"># (1,0,0)
+</span>    <span class="mi">2</span><span class="p">,</span>  <span class="c1"># (1,1,0)
+</span>    <span class="mi">3</span><span class="p">,</span>  <span class="c1"># (0,1,0)
+</span><span class="p">]</span>
+</code></pre></div></div> <h4 id="step-4-identify-unique-voxels">Step 4: Identify Unique Voxels</h4> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">unique</span><span class="p">,</span> <span class="n">cluster_inverse</span><span class="p">,</span> <span class="n">counts</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">unique</span><span class="p">(</span>
+    <span class="n">cluster</span><span class="p">,</span> 
+    <span class="nb">sorted</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> 
+    <span class="n">return_inverse</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> 
+    <span class="n">return_counts</span><span class="o">=</span><span class="bp">True</span>
+<span class="p">)</span>
+</code></pre></div></div> <p><strong>What does torch.unique return?</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Input cluster (example)
+</span><span class="n">cluster</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+<span class="c1">#          ↑─────↑  ↑──↑  ↑────────↑  ↑──────↑
+#          3 pts   2 pts  4 points   3 points
+</span>
+<span class="n">unique</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>  <span class="c1"># Unique voxels
+# Nvoxel = 4
+</span>
+<span class="n">cluster_inverse</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+<span class="c1"># Mapping: point i belongs to unique[cluster_inverse[i]]
+</span>
+<span class="n">counts</span> <span class="o">=</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>  <span class="c1"># Number of points per voxel
+</span></code></pre></div></div> <h4 id="step-5-sorting-and-index-pointers">Step 5: Sorting and Index Pointers</h4> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Sort points by voxel
+</span><span class="n">_</span><span class="p">,</span> <span class="n">sorted_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">sort</span><span class="p">(</span><span class="n">cluster_inverse</span><span class="p">)</span>
+<span class="c1"># sorted_indices: order to group points of the same voxel together
+</span>
+<span class="c1"># Create pointers for each voxel
+</span><span class="n">idx_ptr</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">cat</span><span class="p">([</span>
+    <span class="n">torch</span><span class="p">.</span><span class="nf">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> 
+    <span class="n">torch</span><span class="p">.</span><span class="nf">cumsum</span><span class="p">(</span><span class="n">counts</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="p">])</span>
+<span class="c1"># idx_ptr: (Nvoxel + 1,)
+</span></code></pre></div></div> <p><strong>Example:</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># After sort
+</span><span class="n">sorted_indices</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">11</span><span class="p">]</span>
+<span class="c1"># Points sorted by voxel
+</span>
+<span class="c1"># Index pointers
+</span><span class="n">counts</span> <span class="o">=</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+<span class="n">idx_ptr</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">12</span><span class="p">]</span>
+<span class="c1">#          ↑  ↑  ↑  ↑  ↑
+#          │  │  │  │  └─ End (12 points)
+#          │  │  │  └──── Voxel 3 starts at index 9
+#          │  │  └─────── Voxel 2 starts at index 5
+#          │  └────────── Voxel 1 starts at index 3
+#          └───────────── Voxel 0 starts at index 0
+</span></code></pre></div></div> <h4 id="step-6-aggregate-coordinates-mean">Step 6: Aggregate Coordinates (Mean)</h4> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">coord_pooled</span> <span class="o">=</span> <span class="nf">segment_csr</span><span class="p">(</span>
+    <span class="n">coord</span><span class="p">[</span><span class="n">sorted_indices</span><span class="p">],</span>  <span class="c1"># Coordinates sorted by voxel
+</span>    <span class="n">idx_ptr</span><span class="p">,</span> 
+    <span class="nb">reduce</span><span class="o">=</span><span class="sh">"</span><span class="s">mean</span><span class="sh">"</span>
+<span class="p">)</span>
+<span class="c1"># coord_pooled: (Nvoxel, 3)
+# Mean position of all points in each voxel
+</span></code></pre></div></div> <p><strong>Example:</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Voxel 0 has 3 points:
+</span><span class="n">points_voxel_0</span> <span class="o">=</span> <span class="p">[[</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.8</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.15</span><span class="p">]]</span>
+<span class="n">coord_pooled</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="nf">mean</span><span class="p">(</span><span class="n">points_voxel_0</span><span class="p">)</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.37</span><span class="p">,</span> <span class="mf">0.33</span><span class="p">,</span> <span class="mf">0.15</span><span class="p">]</span>
+
+<span class="c1"># Voxel 1 has 2 points:
+</span><span class="n">points_voxel_1</span> <span class="o">=</span> <span class="p">[[</span><span class="mf">1.2</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">],</span> <span class="p">[</span><span class="mf">1.4</span><span class="p">,</span> <span class="mf">0.6</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">]]</span>
+<span class="n">coord_pooled</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="nf">mean</span><span class="p">(</span><span class="n">points_voxel_1</span><span class="p">)</span> <span class="o">=</span> <span class="p">[</span><span class="mf">1.3</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.35</span><span class="p">]</span>
+</code></pre></div></div> <h4 id="step-7-aggregate-features-max">Step 7: Aggregate Features (Max)</h4> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">feat_pooled</span> <span class="o">=</span> <span class="nf">segment_csr</span><span class="p">(</span>
+    <span class="n">feat</span><span class="p">[</span><span class="n">sorted_indices</span><span class="p">],</span>  <span class="c1"># Features sorted by voxel
+</span>    <span class="n">idx_ptr</span><span class="p">,</span>
+    <span class="nb">reduce</span><span class="o">=</span><span class="sh">"</span><span class="s">max</span><span class="sh">"</span>
+<span class="p">)</span>
+<span class="c1"># feat_pooled: (Nvoxel, out_channels)
+# Channel-wise maximum per voxel
+</span></code></pre></div></div> <p><strong>Why Max instead of Mean?</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Example with 3 points in a voxel
+</span>
+<span class="c1"># Mean pooling
+</span><span class="n">feat_mean</span> <span class="o">=</span> <span class="p">(</span><span class="n">feat1</span> <span class="o">+</span> <span class="n">feat2</span> <span class="o">+</span> <span class="n">feat3</span><span class="p">)</span> <span class="o">/</span> <span class="mi">3</span>
+<span class="c1"># Can "dilute" important features
+</span>
+<span class="c1"># Max pooling (used by PTv2)
+</span><span class="n">feat_max</span> <span class="o">=</span> <span class="nf">max</span><span class="p">(</span><span class="n">feat1</span><span class="p">,</span> <span class="n">feat2</span><span class="p">,</span> <span class="n">feat3</span><span class="p">)</span>
+<span class="c1"># Preserves dominant features per channel
+# More robust to noise and outliers
+</span></code></pre></div></div> <h4 id="step-8-reconstruct-offsets">Step 8: Reconstruct Offsets</h4> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Retrieve batch ID for each voxel
+# (takes batch of first point in each voxel)
+</span><span class="n">batch_pooled</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="n">idx_ptr</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span>
+<span class="c1"># batch_pooled: (Nvoxel,)
+</span>
+<span class="c1"># Convert batch → offset
+</span><span class="n">offset_pooled</span> <span class="o">=</span> <span class="nf">batch2offset</span><span class="p">(</span><span class="n">batch_pooled</span><span class="p">)</span>
+<span class="c1"># offset_pooled: (B,)
+</span></code></pre></div></div> <h4 id="step-9-return-cluster-mapping">Step 9: Return Cluster Mapping</h4> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">return</span> <span class="p">[</span><span class="n">coord_pooled</span><span class="p">,</span> <span class="n">feat_pooled</span><span class="p">,</span> <span class="n">offset_pooled</span><span class="p">],</span> <span class="n">cluster_inverse</span>
+</code></pre></div></div> <p><code class="language-plaintext highlighter-rouge">cluster_inverse</code> is <strong>crucial</strong> because it enables <strong>Map Unpooling</strong> later:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># cluster_inverse: (N,) - voxel id for each original point
+</span><span class="n">cluster_inverse</span><span class="p">[</span><span class="n">point_i</span><span class="p">]</span> <span class="o">=</span> <span class="n">voxel_id</span>
+
+<span class="c1"># Example
+</span><span class="n">cluster_inverse</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+<span class="c1">#                  ↑─────↑  ↑──↑  ↑────────↑  ↑──────↑
+#                  Points of voxel 0, 1, 2, 3
+</span></code></pre></div></div> <p>This mapping will be reused in <code class="language-plaintext highlighter-rouge">UnpoolWithSkip</code> for efficient unpooling.</p> <hr> <h3 id="4-free-map-unpooling">4. Free Map Unpooling</h3> <p><code class="language-plaintext highlighter-rouge">cluster_inverse</code> allows unpooling <strong>without computation</strong>:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># PTv1: must recompute K-NN for interpolation
+</span><span class="n">upsampled</span> <span class="o">=</span> <span class="nf">knn_interpolation</span><span class="p">(</span><span class="n">low_res</span><span class="p">,</span> <span class="n">high_res</span><span class="p">)</span>  <span class="c1"># Costly!
+</span>
+<span class="c1"># PTv2: reuse cluster mapping
+</span><span class="n">upsampled</span> <span class="o">=</span> <span class="n">feat_low_res</span><span class="p">[</span><span class="n">cluster_inverse</span><span class="p">]</span>  <span class="c1"># Instant lookup!
+</span></code></pre></div></div> <h1 id="unpoolwithskip-map-unpooling-with-skip-connections">UnpoolWithSkip: Map Unpooling with Skip Connections</h1> <h2 id="overview-2">Overview</h2> <p><code class="language-plaintext highlighter-rouge">UnpoolWithSkip</code> is the decoder counterpart to <code class="language-plaintext highlighter-rouge">GridPool</code>. It upsamples resolution and merges multi-scale information via skip connections.</p> <figure> <picture> <img src="/assets/img/poinTransformerV2/unpoolWithSkip.svg" class="img-fluid rounded z-depth-1" width="100%" height="auto" loading="lazy" onerror="this.onerror=null; $('.responsive-img-srcset').remove();"> </picture> </figure> <h2 id="problem-with-k-nn-interpolation-ptv1">Problem with K-NN Interpolation (PTv1)</h2> <h3 id="ptv1-interpolation-algorithm">PTv1 Interpolation algorithm</h3> <p>In PTv1, to go from M points (low res) to N points (high res), K-NN interpolation is used.</p> <h3 id="interpolation-problems">Interpolation problems</h3> <p><strong>1. Computational cost:</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># For each high-resolution point N:
+#   - Compute M distances
+#   - Sort to find the K nearest
+#   - Compute weighted average
+</span>
+<span class="n">Complexity</span><span class="p">:</span> <span class="nc">O</span><span class="p">(</span><span class="n">N</span> <span class="err">×</span> <span class="n">M</span> <span class="n">log</span> <span class="n">M</span><span class="p">)</span>
+
+<span class="c1"># Example: M=25k, N=100k
+</span><span class="n">Ops</span><span class="p">:</span> <span class="mi">100</span><span class="n">k</span> <span class="err">×</span> <span class="mi">25</span><span class="n">k</span> <span class="err">×</span> <span class="nf">log</span><span class="p">(</span><span class="mi">25</span><span class="n">k</span><span class="p">)</span> <span class="err">≈</span> <span class="mi">35</span> <span class="n">billion</span><span class="err">!</span>
+</code></pre></div></div> <h2 id="solution-map-unpooling-ptv2">Solution: Map Unpooling (PTv2)</h2> <h3 id="principle-reuse-the-cluster-mapping">Principle: Reuse the Cluster Mapping</h3> <p>PTv2’s idea: <strong>store the mapping during downsampling</strong> and <strong>reuse it during upsampling</strong>.</p> <p><strong>Recall GridPool:</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># GridPool returns cluster_inverse
+</span><span class="n">coord_pooled</span><span class="p">,</span> <span class="n">feat_pooled</span><span class="p">,</span> <span class="n">offset_pooled</span><span class="p">,</span> <span class="n">cluster</span> <span class="o">=</span> <span class="nc">GridPool</span><span class="p">(</span><span class="n">points</span><span class="p">)</span>
+
+<span class="c1"># cluster: (N,) - voxel id for each original point
+</span><span class="n">cluster</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+<span class="c1">#          └──┬──┘  └─┬─┘  └────┬────┘  └──┬──┘
+#          Voxel 0  Voxel 1  Voxel 2   Voxel 3
+</span></code></pre></div></div> <p><strong>Map Unpooling:</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Upsample by direct indexing
+</span><span class="n">feat_upsampled</span> <span class="o">=</span> <span class="n">feat_pooled</span><span class="p">[</span><span class="n">cluster</span><span class="p">]</span>  <span class="c1"># (N, C)
+</span>
+<span class="c1"># Each point gets features of its original voxel
+</span></code></pre></div></div> <p>That is it. A simple lookup. Complexity <strong>O(1)</strong> per point. Total <strong>O(N)</strong>.</p> <hr> <h2 id="detailed-algorithm">Detailed Algorithm</h2> <h3 id="inputs">Inputs</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Current low-resolution points
+</span><span class="n">coord_low</span><span class="p">:</span> <span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>        <span class="c1"># Voxel positions
+</span><span class="n">feat_low</span><span class="p">:</span> <span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">in_ch</span><span class="p">)</span>     <span class="c1"># Voxel features
+</span><span class="n">offset_low</span><span class="p">:</span> <span class="p">(</span><span class="n">B</span><span class="p">,)</span>
+
+<span class="c1"># Skip points (high-resolution - from encoder)
+</span><span class="n">coord_skip</span><span class="p">:</span> <span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>       <span class="c1"># Original positions
+</span><span class="n">feat_skip</span><span class="p">:</span> <span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">skip_ch</span><span class="p">)</span>  <span class="c1"># Original features
+</span><span class="n">offset_skip</span><span class="p">:</span> <span class="p">(</span><span class="n">B</span><span class="p">,)</span>
+
+<span class="c1"># Cluster mapping (from corresponding GridPool)
+</span><span class="n">cluster</span><span class="p">:</span> <span class="p">(</span><span class="n">N</span><span class="p">,)</span>            <span class="c1"># Voxel id per original point
+</span></code></pre></div></div> <h3 id="step-1-project-low-resolution-features">Step 1: Project low-resolution features</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">feat_low_proj</span> <span class="o">=</span> <span class="nc">Linear</span><span class="p">(</span><span class="n">feat_low</span><span class="p">)</span> <span class="err">→</span> <span class="n">BatchNorm1d</span> <span class="err">→</span> <span class="n">ReLU</span>
+<span class="c1"># feat_low_proj: (M, out_ch)
+</span></code></pre></div></div> <h3 id="step-2-map-unpooling">Step 2: Map Unpooling</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Direct lookup via cluster
+</span><span class="n">feat_mapped</span> <span class="o">=</span> <span class="n">feat_low_proj</span><span class="p">[</span><span class="n">cluster</span><span class="p">]</span>
+<span class="c1"># feat_mapped: (N, out_ch)
+</span></code></pre></div></div> <p>Each point recovers exactly the features of its original voxel.</p> <h3 id="step-3-project-skip-features">Step 3: Project skip features</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">feat_skip_proj</span> <span class="o">=</span> <span class="nc">Linear</span><span class="p">(</span><span class="n">feat_skip</span><span class="p">)</span> <span class="err">→</span> <span class="n">BatchNorm1d</span> <span class="err">→</span> <span class="n">ReLU</span>
+<span class="c1"># feat_skip_proj: (N, out_ch)
+</span></code></pre></div></div> <h3 id="step-4-skip-fusion">Step 4: Skip fusion</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">feat_fused</span> <span class="o">=</span> <span class="n">feat_mapped</span> <span class="o">+</span> <span class="n">feat_skip_proj</span>
+<span class="c1"># feat_fused: (N, out_ch)
+</span></code></pre></div></div> <p><strong>Visualization:</strong></p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Low-res (upsampled):        Skip (high-res):
+    feat_mapped                   feat_skip_proj
+         ↓                              ↓
+    [0.2, 0.5, 0.1, 0.8]         [0.3, 0.1, 0.6, 0.2]
+         ↓                              ↓
+         └──────────── + ──────────────┘
+                       ↓
+              [0.5, 0.6, 0.7, 1.0]
+                   feat_fused
+</code></pre></div></div> <h3 id="step-5-output">Step 5: Output</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">return</span> <span class="p">[</span><span class="n">coord_skip</span><span class="p">,</span> <span class="n">feat_fused</span><span class="p">,</span> <span class="n">offset_skip</span><span class="p">]</span>
+<span class="c1"># Return skip coordinates (high resolution)
+# With fused features
+</span></code></pre></div></div> <hr> <h2 id="encoder-and-decoder-full-view">Encoder and Decoder: Full view</h2> <h3 id="encoder">Encoder</h3> <figure> <picture> <img src="/assets/img/poinTransformerV2/encoder.svg" class="img-fluid rounded z-depth-1" width="100%" height="auto" loading="lazy" onerror="this.onerror=null; $('.responsive-img-srcset').remove();"> </picture> </figure> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">class</span> <span class="nc">Encoder</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">points</span><span class="p">):</span>
+        <span class="c1"># Downsampling + feature enrichment
+</span>        <span class="n">points_pooled</span><span class="p">,</span> <span class="n">cluster</span> <span class="o">=</span> <span class="nc">GridPool</span><span class="p">(</span><span class="n">points</span><span class="p">)</span>
+        
+        <span class="c1"># Local attention on voxels
+</span>        <span class="n">points_out</span> <span class="o">=</span> <span class="nc">BlockSequence</span><span class="p">(</span><span class="n">points_pooled</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">points_out</span><span class="p">,</span> <span class="n">cluster</span>
+</code></pre></div></div> <h3 id="decoder">Decoder</h3> <figure> <picture> <img src="/assets/img/poinTransformerV2/decoder.svg" class="img-fluid rounded z-depth-1" width="100%" height="auto" loading="lazy" onerror="this.onerror=null; $('.responsive-img-srcset').remove();"> </picture> </figure> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">class</span> <span class="nc">Decoder</span><span class="p">:</span>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">points_low</span><span class="p">,</span> <span class="n">points_skip</span><span class="p">,</span> <span class="n">cluster</span><span class="p">):</span>
+        <span class="c1"># Upsampling + skip fusion
+</span>        <span class="n">points_up</span> <span class="o">=</span> <span class="nc">UnpoolWithSkip</span><span class="p">(</span><span class="n">points_low</span><span class="p">,</span> <span class="n">points_skip</span><span class="p">,</span> <span class="n">cluster</span><span class="p">)</span>
+        
+        <span class="c1"># Local attention on upsampled points
+</span>        <span class="n">points_out</span> <span class="o">=</span> <span class="nc">BlockSequence</span><span class="p">(</span><span class="n">points_up</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">points_out</span>
+</code></pre></div></div> <hr> <h2 id="overall-performance-ptv1-vs-ptv2">Overall Performance: PTv1 vs PTv2</h2> <h3 id="memory">Memory</h3> <figure> <picture> <img src="/assets/img/poinTransformerV2/ptv2_time_diff.png" class="img-fluid rounded z-depth-1" width="100%" height="auto" loading="lazy" onerror="this.onerror=null; $('.responsive-img-srcset').remove();"> </picture> </figure> <h3 id="accuracy">Accuracy</h3> <figure> <picture> <img src="/assets/img/poinTransformerV2/ptv2_s3dis_miou.png" class="img-fluid rounded z-depth-1" width="100%" height="auto" loading="lazy" onerror="this.onerror=null; $('.responsive-img-srcset').remove();"> </picture> </figure> <hr> </body></html>
