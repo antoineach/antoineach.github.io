@@ -1,7 +1,6 @@
 ---
-
 layout: post
-title: "Point Transformer v2: Architecture and Implementation Details"
+title: "Point Transformer v2: Architecture and Implementation Details en"
 date: 2025-10-26
 description: Detailed analysis of the Point Transformer v2 architecture for point-cloud segmentation and classification
 tags: deep-learning point-cloud transformer architecture
@@ -1059,3 +1058,4 @@ class Decoder:
 {% include figure.liquid path="assets/img/poinTransformerV2/ptv2_s3dis_miou.png" class="img-fluid rounded z-depth-1" %}
 
 ---
+
