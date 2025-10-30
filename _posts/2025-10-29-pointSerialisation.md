@@ -1,10 +1,13 @@
 ---
+layout: post
 title: "From 3D Clouds to 1D Sequences — Understanding Point Cloud Serialization"
 date: 2025-10-29
 description: "How Morton codes (Z-order curves) transform unordered 3D point clouds into ordered sequences for modern architectures like PointTransformerV3 and PointMamba."
 categories: [3D Deep Learning, Transformers, Point Clouds]
 tags: [Morton code, Z-order, PointTransformerV3, PointMamba, 3D vision]
 ---
+
+
 
 ## 1. Why serialization matters
 
@@ -192,3 +195,4 @@ we can now feed the point cloud to **sequence-based models** like Transformers o
 * [PointTransformerV3 (Zhao et al., 2024)](https://arxiv.org/abs/2408.XXXXX)
 * [Morton order (Wikipedia)](https://en.wikipedia.org/wiki/Z-order_curve)
 * [PointMamba (2025)](https://arxiv.org/abs/2502.XXXXX)
+
