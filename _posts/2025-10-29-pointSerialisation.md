@@ -7,8 +7,6 @@ categories: [3D Deep Learning, Transformers, Point Clouds]
 tags: [Morton code, Z-order, PointTransformerV3, PointMamba, 3D vision]
 ---
 
-
-
 ## 1. Why serialization matters
 
 Traditional point cloud models like **PointTransformerV1** or **PointNet++** operate on **unordered sets** of points.
@@ -90,6 +88,10 @@ so their Morton keys are numerically close → **locality is preserved**.
 ## 4. Handling multiple batches
 
 In training, we often have **multiple point clouds** in the same batch.  
+
+For a detailed explanation of this batching strategy, see
+👉 [Batching Point Clouds]({{ '/blog/2025/batchingPointclouds/' | relative_url }}).
+
 If we serialize them all, their Morton keys could **collide** (same value).
 
 To prevent this, PointTransformerV3 reserves **different numeric intervals** for each batch.
@@ -195,4 +197,3 @@ we can now feed the point cloud to **sequence-based models** like Transformers o
 * [PointTransformerV3 (Zhao et al., 2024)](https://arxiv.org/abs/2408.XXXXX)
 * [Morton order (Wikipedia)](https://en.wikipedia.org/wiki/Z-order_curve)
 * [PointMamba (2025)](https://arxiv.org/abs/2502.XXXXX)
-
