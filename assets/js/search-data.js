@@ -30,7 +30,18 @@ ninja.data = [{
           handler: () => {
             window.location.href = "/repositories/";
           },
-        },{id: "post-point-transformer-v2-architecture-and-implementation-details-en",
+        },{id: "post-from-3d-clouds-to-1d-sequences-understanding-point-cloud-serialization",
+        
+          title: "From 3D Clouds to 1D Sequences — Understanding Point Cloud Serialization",
+        
+        description: "How Morton codes (Z-order curves) transform unordered 3D point clouds into ordered sequences for modern architectures like PointTransformerV3 and PointMamba.",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2025/pointSerialisation/";
+          
+        },
+      },{id: "post-point-transformer-v2-architecture-and-implementation-details-en",
         
           title: "Point Transformer v2: Architecture and Implementation Details en",
         
