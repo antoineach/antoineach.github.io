@@ -191,9 +191,3 @@ we can now feed the point cloud to **sequence-based models** like Transformers o
 5. Feed into Transformer/Mamba
 
 
-## References
-
-* [OCNN: Octree-based Sparse CNNs (Wang et al., 2022)](https://github.com/microsoft/OCNN)
-* [PointTransformerV3 (Zhao et al., 2024)](https://arxiv.org/abs/2408.XXXXX)
-* [Morton order (Wikipedia)](https://en.wikipedia.org/wiki/Z-order_curve)
-* [PointMamba (2025)](https://arxiv.org/abs/2502.XXXXX)
