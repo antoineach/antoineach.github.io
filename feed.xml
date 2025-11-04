@@ -1,4 +1,946 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en"><generator uri="https://jekyllrb.com/" version="4.4.1">Jekyll</generator><link href="http://antoineach.github.io//feed.xml" rel="self" type="application/atom+xml"/><link href="http://antoineach.github.io//" rel="alternate" type="text/html" hreflang="en"/><updated>2025-10-30T13:38:49+00:00</updated><id>http://antoineach.github.io//feed.xml</id><title type="html">blank</title><entry><title type="html">From 3D Clouds to 1D Sequences — Understanding Point Cloud Serialization</title><link href="http://antoineach.github.io//blog/2025/pointSerialisation/" rel="alternate" type="text/html" title="From 3D Clouds to 1D Sequences — Understanding Point Cloud Serialization"/><published>2025-10-29T00:00:00+00:00</published><updated>2025-10-29T00:00:00+00:00</updated><id>http://antoineach.github.io//blog/2025/pointSerialisation</id><content type="html" xml:base="http://antoineach.github.io//blog/2025/pointSerialisation/"><![CDATA[<h2 id="1-why-serialization-matters">1. Why serialization matters</h2> <p>Traditional point cloud models like <strong>PointTransformerV1</strong> or <strong>PointNet++</strong> operate on <strong>unordered sets</strong> of points.</p> <p>To define local neighborhoods, they rely on:</p> <ul> <li>FPS (Farthest Point Sampling),</li> <li>KNN (K-Nearest Neighbors),</li> <li>or Grid/Voxel pooling.</li> </ul> <p>Those operations create small groups (patches) of points, shaped like <code class="language-plaintext highlighter-rouge">[N, K, C]</code>, where:</p> <ul> <li><code class="language-plaintext highlighter-rouge">N</code> = number of center points,</li> <li><code class="language-plaintext highlighter-rouge">K</code> = number of neighbors,</li> <li><code class="language-plaintext highlighter-rouge">C</code> = number of features.</li> </ul> <p>But in <strong>PointTransformerV3</strong> or <strong>PointMamba</strong>, this paradigm shifts:</p> <blockquote> <p>The entire point cloud becomes a single ordered <strong>sequence</strong> <code class="language-plaintext highlighter-rouge">[L, C]</code>.</p> </blockquote> <p>So we need a <strong>consistent way to order points in 3D</strong>.<br/> That’s what <strong>serialization</strong> does.</p> <hr/> <h2 id="2-the-z-order-morton-order-curve">2. The Z-order (Morton order) curve</h2> <p>We can’t directly sort 3D coordinates <code class="language-plaintext highlighter-rouge">(x, y, z)</code> — it’s not one-dimensional.<br/> But we can <strong>map</strong> each 3D point to a <strong>single integer key</strong> that roughly preserves spatial proximity.</p> <p>This mapping is called the <strong>Morton code</strong> or <strong>Z-order</strong>.</p> <h3 id="example-in-2d-for-visualization">Example in 2D (for visualization)</h3> <p>Below is a Z-order traversal of a 4×4 grid (2 bits per axis):</p> <figure> <picture> <img src="/assets/img/pointTransformerV3/z_order.png" class="img-fluid rounded z-depth-1 shadow-sm" width="100%" height="auto" loading="eager" onerror="this.onerror=null; $('.responsive-img-srcset').remove();"/> </picture> </figure> <p>In this curve:</p> <ul> <li>Each cell <code class="language-plaintext highlighter-rouge">(x, y)</code> is assigned a <strong>Z-shaped index</strong>.</li> <li>Cells that are close in space get <strong>close indices</strong>.</li> <li>When we sort points by this index, we obtain a <strong>spatially coherent sequence</strong>.</li> </ul> <hr/> <h2 id="3-bit-interleaving-explained">3. Bit interleaving explained</h2> <p>Let’s take 3D integer coordinates <code class="language-plaintext highlighter-rouge">x, y, z</code> in binary.</p> <p>Suppose:</p> <ul> <li><code class="language-plaintext highlighter-rouge">x = 5 → 101₂</code></li> <li><code class="language-plaintext highlighter-rouge">y = 3 → 011₂</code></li> <li><code class="language-plaintext highlighter-rouge">z = 2 → 010₂</code></li> </ul> <p>Each number has 3 bits: <code class="language-plaintext highlighter-rouge">x₂x₁x₀</code>, <code class="language-plaintext highlighter-rouge">y₂y₁y₀</code>, <code class="language-plaintext highlighter-rouge">z₂z₁z₀</code>.</p> <p>The <strong>Morton encoding</strong> takes these bits and <strong>interleaves them</strong>:</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en"><generator uri="https://jekyllrb.com/" version="4.4.1">Jekyll</generator><link href="http://antoineach.github.io//feed.xml" rel="self" type="application/atom+xml"/><link href="http://antoineach.github.io//" rel="alternate" type="text/html" hreflang="en"/><updated>2025-11-04T14:09:54+00:00</updated><id>http://antoineach.github.io//feed.xml</id><title type="html">blank</title><entry><title type="html">Point Transformer v3: Serialization-based Architecture for Efficient Point Cloud Processing</title><link href="http://antoineach.github.io//blog/2025/pointTransformerV3/" rel="alternate" type="text/html" title="Point Transformer v3: Serialization-based Architecture for Efficient Point Cloud Processing"/><published>2025-10-30T00:00:00+00:00</published><updated>2025-10-30T00:00:00+00:00</updated><id>http://antoineach.github.io//blog/2025/pointTransformerV3</id><content type="html" xml:base="http://antoineach.github.io//blog/2025/pointTransformerV3/"><![CDATA[<h1 id="point-transformer-v3-from-voxelization-to-serialization">Point Transformer v3: From Voxelization to Serialization</h1> <h2 id="introduction">Introduction</h2> <p>After the success of Point Transformer v2’s voxel-based approach, <strong>Point Transformer v3 (PTv3)</strong> introduces a fundamentally different philosophy: instead of organizing points through voxelization and grid pooling, PTv3 uses <strong>spatial serialization</strong> based on space-filling curves. This paradigm shift brings several key advantages:</p> <ul> <li><strong>Full attention mechanism</strong> with QKᵀ instead of grouped vector attention</li> <li><strong>Serialization-based pooling</strong> that preserves spatial locality without explicit voxels</li> <li><strong>Flash Attention support</strong> for massive speedups (up to 10× faster attention computation)</li> <li><strong>Multiple ordering strategies</strong> (Z-order, Hilbert curves) for better spatial coverage</li> </ul> <hr/> <h2 id="overall-architecture">Overall Architecture</h2> <pre><code class="language-mermaid">graph LR
+    subgraph INPUT["🎯 INPUT"]
+        I0["Point Cloud&lt;br/&gt;(N, 6)&lt;br/&gt;xyz + rgb"]
+    end
+
+    subgraph PREP["🔧 PREPROCESSING"]
+        S1["Serialization&lt;br/&gt;Z-order/Hilbert&lt;br/&gt;→ serialized_order"]
+        S2["Sparsify&lt;br/&gt;→ SparseConvTensor"]
+    end
+
+    subgraph STEM["🌱 EMBEDDING STEM"]
+        E1["SubMConv3d 5×5×5&lt;br/&gt;(N, 6) → (N, 32)&lt;br/&gt;+ BatchNorm + GELU"]
+    end
+
+    subgraph ENC0["📦 ENCODER STAGE 0&lt;br/&gt;stride=1, 2 blocks"]
+        E0_B1["Block 0&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N, 32)&lt;br/&gt;patch_size=1024, heads=2"]
+        E0_B2["Block 1&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N, 32)&lt;br/&gt;order_index=1"]
+    end
+
+    subgraph ENC1["📦 ENCODER STAGE 1&lt;br/&gt;stride=2, 2 blocks"]
+        E1_P["SerializedPooling&lt;br/&gt;stride=2, bit_shift=3&lt;br/&gt;(N, 32) → (N/2, 64)"]
+        E1_B1["Block 0&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N/2, 64)&lt;br/&gt;patch_size=1024, heads=4"]
+        E1_B2["Block 1&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N/2, 64)&lt;br/&gt;order_index=1"]
+    end
+
+    subgraph ENC2["📦 ENCODER STAGE 2&lt;br/&gt;stride=2, 2 blocks"]
+        E2_P["SerializedPooling&lt;br/&gt;stride=2, bit_shift=3&lt;br/&gt;(N/2, 64) → (N/4, 128)"]
+        E2_B1["Block 0&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N/4, 128)&lt;br/&gt;patch_size=1024, heads=8"]
+        E2_B2["Block 1&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N/4, 128)&lt;br/&gt;order_index=1"]
+    end
+
+    subgraph ENC3["📦 ENCODER STAGE 3&lt;br/&gt;stride=2, 6 blocks"]
+        E3_P["SerializedPooling&lt;br/&gt;stride=2, bit_shift=3&lt;br/&gt;(N/4, 128) → (N/8, 256)"]
+        E3_B1["Block 0&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N/8, 256)&lt;br/&gt;patch_size=1024, heads=16"]
+        E3_BX["... 4 more blocks ...&lt;br/&gt;order cycling"]
+        E3_B6["Block 5&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N/8, 256)&lt;br/&gt;order_index=1"]
+    end
+
+    subgraph ENC4["📦 ENCODER STAGE 4 (BOTTLENECK)&lt;br/&gt;stride=2, 2 blocks"]
+        E4_P["SerializedPooling&lt;br/&gt;stride=2, bit_shift=3&lt;br/&gt;(N/8, 256) → (N/16, 512)"]
+        E4_B1["Block 0&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N/16, 512)&lt;br/&gt;patch_size=1024, heads=32"]
+        E4_B2["Block 1&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N/16, 512)&lt;br/&gt;order_index=1"]
+    end
+
+    subgraph DEC3["📤 DECODER STAGE 3&lt;br/&gt;2 blocks"]
+        D3_U["SerializedUnpooling&lt;br/&gt;Map + Skip Fusion&lt;br/&gt;(N/16, 512) + skip → (N/8, 256)"]
+        D3_B1["Block 0&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N/8, 256)&lt;br/&gt;patch_size=1024, heads=16"]
+        D3_B2["Block 1&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N/8, 256)&lt;br/&gt;order_index=1"]
+    end
+
+    subgraph DEC2["📤 DECODER STAGE 2&lt;br/&gt;2 blocks"]
+        D2_U["SerializedUnpooling&lt;br/&gt;Map + Skip Fusion&lt;br/&gt;(N/8, 256) + skip → (N/4, 128)"]
+        D2_B1["Block 0&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N/4, 128)&lt;br/&gt;patch_size=1024, heads=8"]
+        D2_B2["Block 1&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N/4, 128)&lt;br/&gt;order_index=1"]
+    end
+
+    subgraph DEC1["📤 DECODER STAGE 1&lt;br/&gt;2 blocks"]
+        D1_U["SerializedUnpooling&lt;br/&gt;Map + Skip Fusion&lt;br/&gt;(N/4, 128) + skip → (N/2, 64)"]
+        D1_B1["Block 0&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N/2, 64)&lt;br/&gt;patch_size=1024, heads=4"]
+        D1_B2["Block 1&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N/2, 64)&lt;br/&gt;order_index=1"]
+    end
+
+    subgraph DEC0["📤 DECODER STAGE 0&lt;br/&gt;2 blocks"]
+        D0_U["SerializedUnpooling&lt;br/&gt;Map + Skip Fusion&lt;br/&gt;(N/2, 64) + skip → (N, 64)"]
+        D0_B1["Block 0&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N, 64)&lt;br/&gt;patch_size=1024, heads=4"]
+        D0_B2["Block 1&lt;br/&gt;CPE + Attn + MLP&lt;br/&gt;(N, 64)&lt;br/&gt;order_index=1"]
+    end
+
+    subgraph OUTPUT["🎯 OUTPUT"]
+        O1["Features&lt;br/&gt;(N, 64)&lt;br/&gt;Full Resolution"]
+    end
+
+    %% Flow principal
+    I0 --&gt; S1
+    S1 --&gt; S2
+    S2 --&gt; E1
+    E1 --&gt; E0_B1
+    E0_B1 --&gt; E0_B2
+    
+    E0_B2 --&gt; E1_P
+    E1_P --&gt; E1_B1
+    E1_B1 --&gt; E1_B2
+    
+    E1_B2 --&gt; E2_P
+    E2_P --&gt; E2_B1
+    E2_B1 --&gt; E2_B2
+    
+    E2_B2 --&gt; E3_P
+    E3_P --&gt; E3_B1
+    E3_B1 --&gt; E3_BX
+    E3_BX --&gt; E3_B6
+    
+    E3_B6 --&gt; E4_P
+    E4_P --&gt; E4_B1
+    E4_B1 --&gt; E4_B2
+    
+    %% Decoder
+    E4_B2 --&gt; D3_U
+    D3_U --&gt; D3_B1
+    D3_B1 --&gt; D3_B2
+    
+    D3_B2 --&gt; D2_U
+    D2_U --&gt; D2_B1
+    D2_B1 --&gt; D2_B2
+    
+    D2_B2 --&gt; D1_U
+    D1_U --&gt; D1_B1
+    D1_B1 --&gt; D1_B2
+    
+    D1_B2 --&gt; D0_U
+    D0_U --&gt; D0_B1
+    D0_B1 --&gt; D0_B2
+    
+    D0_B2 --&gt; O1
+
+    %% Skip connections (en pointillés)
+    E0_B2 -.-&gt;|"pooling_parent&lt;br/&gt;+ pooling_inverse"| D0_U
+    E1_B2 -.-&gt;|"pooling_parent&lt;br/&gt;+ pooling_inverse"| D1_U
+    E2_B2 -.-&gt;|"pooling_parent&lt;br/&gt;+ pooling_inverse"| D2_U
+    E3_B6 -.-&gt;|"pooling_parent&lt;br/&gt;+ pooling_inverse"| D3_U
+
+    %% Style
+    classDef inputStyle fill:#e1f5e1,stroke:#4caf50,stroke-width:3px,color:#000
+    classDef prepStyle fill:#fff3e0,stroke:#ff9800,stroke-width:2px,color:#000
+    classDef stemStyle fill:#f3e5f5,stroke:#9c27b0,stroke-width:3px,color:#000
+    classDef encStyle fill:#e3f2fd,stroke:#2196f3,stroke-width:2px,color:#000
+    classDef bottleneckStyle fill:#fce4ec,stroke:#e91e63,stroke-width:3px,color:#000
+    classDef decStyle fill:#fff9c4,stroke:#fbc02d,stroke-width:2px,color:#000
+    classDef outputStyle fill:#c8e6c9,stroke:#4caf50,stroke-width:3px,color:#000
+    
+    class I0 inputStyle
+    class S1,S2 prepStyle
+    class E1 stemStyle
+    class E0_B1,E0_B2,E1_P,E1_B1,E1_B2,E2_P,E2_B1,E2_B2,E3_P,E3_B1,E3_BX,E3_B6 encStyle
+    class E4_P,E4_B1,E4_B2 bottleneckStyle
+    class D3_U,D3_B1,D3_B2,D2_U,D2_B1,D2_B2,D1_U,D1_B1,D1_B2,D0_U,D0_B1,D0_B2 decStyle
+    class O1 outputStyle
+</code></pre> <p>The PTv3 architecture follows a U-Net structure similar to PTv2, but <strong>pooling is based on serialization codes</strong> rather than voxel aggregation.</p> <hr/> <h2 id="the-serialization-revolution-from-3d-to-1d">The Serialization Revolution: From 3D to 1D</h2> <h3 id="the-problem-with-voxelization">The Problem with Voxelization</h3> <p>PTv2’s voxel-based approach has inherent limitations:</p> <ol> <li><strong>Information loss</strong>: Multiple points in the same voxel are aggregated</li> <li><strong>Fixed grid resolution</strong>: Grid size must be chosen a priori</li> <li><strong>Boundary artifacts</strong>: Points near voxel boundaries may be separated</li> </ol> <h3 id="the-serialization-solution">The Serialization Solution</h3> <p>PTv3 uses <strong>Morton, Hilbert codes</strong> to serialize 3D points into a 1D sequence while preserving spatial locality. For a detailed explanation of theses codes, see <a href="/blog/2025/pointSerialisation/">my article on Point Cloud serialization</a>.</p> <p>Here’s how it works conceptually:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Original 3D coordinates
+</span><span class="n">points_3d</span> <span class="o">=</span> <span class="p">[[</span><span class="mf">0.15</span><span class="p">,</span> <span class="mf">0.23</span><span class="p">,</span> <span class="mf">0.17</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.16</span><span class="p">,</span> <span class="mf">0.24</span><span class="p">,</span> <span class="mf">0.18</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.85</span><span class="p">,</span> <span class="mf">0.92</span><span class="p">,</span> <span class="mf">0.74</span><span class="p">]]</span>
+
+<span class="c1"># Step 1: Discretize to grid (like PTv2, but just for ordering)
+</span><span class="n">grid_coord</span> <span class="o">=</span> <span class="nf">discretize</span><span class="p">(</span><span class="n">points_3d</span><span class="p">,</span> <span class="n">grid_size</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
+<span class="c1"># Result: [[15, 23, 17], [16, 24, 18], [85, 92, 74]]
+</span>
+<span class="c1"># Step 2: Compute Morton codes (interleaving bits)
+</span><span class="n">codes</span> <span class="o">=</span> <span class="p">[</span><span class="nf">morton_encode</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span> <span class="ow">in</span> <span class="n">grid_coord</span><span class="p">]</span>
+<span class="c1"># Result: [3847, 4102, 892743] (example values)
+</span>
+<span class="c1"># Step 3: Sort by code
+</span><span class="n">sorted_indices</span> <span class="o">=</span> <span class="nf">argsort</span><span class="p">(</span><span class="n">codes</span><span class="p">)</span>
+<span class="c1"># Points are now in spatial order!
+</span></code></pre></div></div> <p><strong>Nearby points in 3D space have similar codes</strong>, so sorting by code creates spatially coherent sequences.</p> <hr/> <h3 id="data-structures">Data Structures</h3> <p>The <code class="language-plaintext highlighter-rouge">Point</code> class in <strong>Pointcept</strong> provides a unified structure for managing serialized point cloud data, ensuring consistency in metadata and transformed versions (such as voxelized, serialized, or sparsified forms). By inheriting from Python’s <code class="language-plaintext highlighter-rouge">dict</code>, each instance acts as a flexible container, allowing seamless tracking of point coordinates, features, and batch information.</p> <p>This structure enables direct integration with neural network layers, where serialized data can be accessed and processed without manual conversion. For example, the <code class="language-plaintext highlighter-rouge">PointLayer</code> class, which inherits from <code class="language-plaintext highlighter-rouge">PointModule</code>, operates directly on the <code class="language-plaintext highlighter-rouge">Point</code> object, manipulating its attributes such as <code class="language-plaintext highlighter-rouge">feat</code> or <code class="language-plaintext highlighter-rouge">grid_coord</code>. Similarly, the <code class="language-plaintext highlighter-rouge">serialization</code> method transforms continuous coordinates into spatially ordered, Morton (Z-order) encoded values, while the <code class="language-plaintext highlighter-rouge">sparsify</code> method prepares the point data for sparse convolutions.</p> <p>Example 1: A <code class="language-plaintext highlighter-rouge">PointLinear</code> module could modify the <code class="language-plaintext highlighter-rouge">feat</code> attribute of a <code class="language-plaintext highlighter-rouge">Point</code> object in the forward pass:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">class</span> <span class="nc">PointLinear</span><span class="p">(</span><span class="n">PointModule</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">in_dim</span><span class="p">,</span> <span class="n">out_dim</span><span class="p">):</span>
+        <span class="nf">super</span><span class="p">().</span><span class="nf">__init__</span><span class="p">()</span>
+        <span class="n">self</span><span class="p">.</span><span class="n">linear</span> <span class="o">=</span> <span class="n">nn</span><span class="p">.</span><span class="nc">Linear</span><span class="p">(</span><span class="n">in_dim</span><span class="p">,</span> <span class="n">out_dim</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">point</span><span class="p">):</span>
+        <span class="n">point</span><span class="p">[</span><span class="sh">"</span><span class="s">feat</span><span class="sh">"</span><span class="p">]</span> <span class="o">=</span> <span class="n">self</span><span class="p">.</span><span class="nf">linear</span><span class="p">(</span><span class="n">point</span><span class="p">[</span><span class="sh">"</span><span class="s">feat</span><span class="sh">"</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">point</span>
+</code></pre></div></div> <p>Example 2: In <code class="language-plaintext highlighter-rouge">PointSequential</code>, different modules operate on a <code class="language-plaintext highlighter-rouge">Point</code> object, managing both its dense and sparse features:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">seq</span> <span class="o">=</span> <span class="nc">PointSequential</span><span class="p">(</span>
+    <span class="nc">PointLinear</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span>
+    <span class="n">nn</span><span class="p">.</span><span class="nc">BatchNorm1d</span><span class="p">(</span><span class="mi">8</span><span class="p">),</span>
+    <span class="n">spconv</span><span class="p">.</span><span class="nc">SubMConv3d</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="p">)</span>
+</code></pre></div></div> <p>This approach ensures that each point cloud’s transformation and feature processing is coherent across multiple stages of the pipeline.</p> <hr/> <h2 id="serializedattention-back-to-standard-attention">SerializedAttention: Back to Standard Attention</h2> <h3 id="ptv2s-groupedvectorattention-limitations">PTv2’s GroupedVectorAttention Limitations</h3> <p>Recall that PTv2 used a specialized <strong>GroupedVectorAttention</strong> that:</p> <ul> <li>Computed only vector similarities, not full QKᵀ attention</li> <li>Was limited to local neighborhoods</li> </ul> <h3 id="ptv3s-return-to-standard-attention">PTv3’s Return to Standard Attention</h3> <p>PTv3 returns to the <strong>standard transformer attention</strong> mechanism:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nc">Attention</span><span class="p">(</span><span class="n">Q</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">V</span><span class="p">)</span> <span class="o">=</span> <span class="nf">softmax</span><span class="p">(</span><span class="n">QKᵀ</span><span class="o">/</span><span class="err">√</span><span class="n">d</span><span class="p">)</span> <span class="n">V</span>
+</code></pre></div></div> <p>But how can we apply this to point clouds? The answer is <strong>patch-based serialization</strong>.</p> <pre><code class="language-mermaid">graph TB
+    subgraph SATTN_DETAIL["🔍 SerializedAttention"]
+        direction TB
+        
+        ATTN_IN["Input: point.feat&lt;br/&gt;(N, C)"]
+        
+        subgraph PREP["Data prepration"]
+            P1["get_padding_and_inverse&lt;br/&gt;pad, unpad, cu_seqlens"]
+            P2["order = serialized_order[pad]&lt;br/&gt;inverse = unpad[serialized_inverse]"]
+        end
+        
+        subgraph QKV["QKV Generation"]
+            Q1["QKV Linear&lt;br/&gt;(N, C) → (N, 3C)"]
+            Q2["Arrange by order&lt;br/&gt;qkv = qkv[order]"]
+            Q3["Reshape into patchs&lt;br/&gt;(N, 3C) → (N', K, 3C)"]
+            Q4["Split + reshape multi-head&lt;br/&gt;(N', K, 3, H, C/H)"]
+            Q5["Permute + unbind&lt;br/&gt;→ Q, K, V: (N', H, K, C/H)"]
+        end
+        
+        subgraph ATTN_COMP["Attention Computation"]
+            direction TB
+            
+            A1["Q @ K^T&lt;br/&gt;(N', H, K, K)"]
+            A4["Softmax&lt;br/&gt;(N', H, K, K)"]
+            A5["Attention Dropout"]
+            A6["Attn @ V&lt;br/&gt;(N', H, K, C/H)"]
+        end
+        
+        subgraph POST["Post-Processing"]
+            PP1["Transpose + reshape&lt;br/&gt;(N', K, C)"]
+            PP2["Original order&lt;br/&gt;feat = feat[inverse]"]
+            PP3["Projection + Dropout&lt;br/&gt;(N, C)"]
+        end
+        
+        ATTN_OUT["Output: point.feat&lt;br/&gt;(N, C)"]
+        
+        ATTN_IN --&gt; P1
+        P1 --&gt; P2
+        P2 --&gt; Q1
+        Q1 --&gt; Q2
+        Q2 --&gt; Q3
+        Q3 --&gt; Q4
+        Q4 --&gt; Q5
+        
+        Q5 --&gt; A1
+        A1 --&gt; A4
+        A4 --&gt; A5
+        A5 --&gt; A6
+        
+        A6 --&gt; PP1
+        PP1 --&gt; PP2
+        PP2 --&gt; PP3
+        PP3 --&gt; ATTN_OUT
+    end
+    
+    classDef prepStyle fill:#fff3e0,stroke:#ff9800,stroke-width:2px,color:#000
+    classDef qkvStyle fill:#e1f5fe,stroke:#03a9f4,stroke-width:2px,color:#000
+    classDef attnStyle fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px,color:#000
+    classDef postStyle fill:#e8f5e9,stroke:#4caf50,stroke-width:2px,color:#000
+    
+    class ATTN_IN,ATTN_OUT prepStyle
+    class P1,P2 prepStyle
+    class Q1,Q2,Q3,Q4,Q5 qkvStyle
+    class A1,A2,A3,A4,A5,A6 attnStyle
+    class PP1,PP2,PP3 postStyle
+</code></pre> <h3 id="step-by-step-serializedattention">Step-by-Step SerializedAttention</h3> <p><strong>After reorganization:</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">qkv</span> <span class="o">=</span> <span class="n">qkv</span><span class="p">[</span><span class="n">order</span><span class="p">]</span>
+
+<span class="c1"># Structure of reorganized qkv:
+</span><span class="n">qkv</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="c1"># All points from cloud 0 (in Z-order)
+</span>    <span class="n">qkv</span><span class="p">[</span><span class="mi">523</span><span class="p">],</span> <span class="n">qkv</span><span class="p">[</span><span class="mi">12</span><span class="p">],</span> <span class="p">...,</span> <span class="n">qkv</span><span class="p">[</span><span class="mi">234</span><span class="p">],</span>
+    <span class="c1"># All points from cloud 1 (in Z-order)
+</span>    <span class="n">qkv</span><span class="p">[</span><span class="mi">1023</span><span class="p">],</span> <span class="n">qkv</span><span class="p">[</span><span class="mi">1456</span><span class="p">],</span> <span class="p">...,</span> <span class="n">qkv</span><span class="p">[</span><span class="mi">2300</span><span class="p">],</span>
+    <span class="c1"># All points from cloud 2 (in Z-order)
+</span>    <span class="n">qkv</span><span class="p">[</span><span class="mi">2501</span><span class="p">],</span> <span class="n">qkv</span><span class="p">[</span><span class="mi">2789</span><span class="p">],</span> <span class="p">...,</span> <span class="n">qkv</span><span class="p">[</span><span class="mi">3299</span><span class="p">]</span>
+<span class="p">]</span>
+</code></pre></div></div> <hr/> <h3 id="patch-splitting-no-mixing">Patch Splitting: No Mixing!</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># After reorganization
+</span><span class="n">qkv</span><span class="p">:</span> <span class="p">(</span><span class="mi">3300</span><span class="p">,</span> <span class="mi">3</span><span class="n">C</span><span class="p">)</span>
+<span class="c1"># [0:1000] points from cloud 0
+# [1000:2500] points from cloud 1  
+# [2500:3300] points from cloud 2
+</span>
+<span class="c1"># Split into patches of K=1024
+</span><span class="n">qkv</span><span class="p">.</span><span class="nf">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">H</span><span class="p">,</span> <span class="n">C</span><span class="sh">'</span><span class="s">)
+
+# Created patches:
+Patch 0: qkv[0:1024]      # Points from cloud 0 ONLY ✓
+Patch 1: qkv[1024:2048]   # Points from cloud 1 ONLY ✓
+Patch 2: qkv[2048:3072]   # Points from cloud 1 ONLY ✓
+Patch 3: qkv[3072:3300]   # Points from cloud 2 (incomplete patch, 228 points)
+</span></code></pre></div></div> <p><strong>Each patch contains points from ONE cloud only!</strong></p> <hr/> <h3 id="attention-q--kt-safe">Attention Q @ K^T: Safe!</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># For each patch
+</span><span class="n">attn</span> <span class="o">=</span> <span class="p">(</span><span class="n">q</span> <span class="o">@</span> <span class="n">k</span><span class="p">.</span><span class="nf">transpose</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+<span class="c1"># attn[patch_i]: (H, K, K)
+</span>
+<span class="c1"># Patch 0 contains ONLY points from cloud 0
+# → Attention happens ONLY among points from cloud 0 ✓
+</span>
+<span class="c1"># Patch 1 contains ONLY points from cloud 1
+# → Attention happens ONLY among points from cloud 1 ✓
+</span></code></pre></div></div> <p><strong>Why does this work?</strong></p> <p>The attention <code class="language-plaintext highlighter-rouge">Q @ K^T</code> never mixes patches:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Shape before attention
+</span><span class="n">q</span><span class="p">:</span> <span class="p">(</span><span class="n">N</span><span class="sh">'</span><span class="s">, H, K, C</span><span class="sh">'</span><span class="p">)</span>
+<span class="n">k</span><span class="p">:</span> <span class="p">(</span><span class="n">N</span><span class="sh">'</span><span class="s">, H, K, C</span><span class="sh">'</span><span class="p">)</span>
+
+<span class="c1"># Attention by patch
+</span><span class="k">for</span> <span class="n">patch_i</span> <span class="ow">in</span> <span class="nf">range</span><span class="p">(</span><span class="n">N</span><span class="sh">'</span><span class="s">):
+    attn[patch_i] = q[patch_i] @ k[patch_i].T
+    # ↑ Patch i only sees patch i, never other patches!
+</span></code></pre></div></div> <hr/> <h2 id="special-case-patches-spanning-two-clouds">Special Case: Patches Spanning Two Clouds?</h2> <h3 id="the-potential-problem">The Potential Problem</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># If a cloud size is not a multiple of patch_size
+</span><span class="n">Cloud</span> <span class="mi">0</span><span class="p">:</span> <span class="mi">1000</span> <span class="n">points</span>
+<span class="n">Cloud</span> <span class="mi">1</span><span class="p">:</span> <span class="mi">1500</span> <span class="n">points</span>
+<span class="n">patch_size</span> <span class="o">=</span> <span class="mi">1024</span>
+
+<span class="c1"># After naive splitting
+</span><span class="n">Patch</span> <span class="mi">0</span><span class="p">:</span> <span class="n">points</span> <span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1024</span><span class="p">]</span>     <span class="c1"># 1000 from cloud 0 + 24 from cloud 1 ❌
+</span><span class="n">Patch</span> <span class="mi">1</span><span class="p">:</span> <span class="n">points</span> <span class="p">[</span><span class="mi">1024</span><span class="p">:</span><span class="mi">2048</span><span class="p">]</span>  <span class="c1"># Points from cloud 1
+</span><span class="n">Patch</span> <span class="mi">2</span><span class="p">:</span> <span class="n">points</span> <span class="p">[</span><span class="mi">2048</span><span class="p">:</span><span class="mi">3072</span><span class="p">]</span>  <span class="c1"># Points from cloud 1 + start of cloud 2 ❌
+</span></code></pre></div></div> <p><strong>Problem:</strong> A patch could contain points from two different clouds!</p> <h3 id="solution-smart-padding">Solution: Smart Padding</h3> <p>That is exactly what <code class="language-plaintext highlighter-rouge">get_padding_and_inverse</code> does!</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">get_padding_and_inverse</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">point</span><span class="p">):</span>
+    <span class="n">offset</span> <span class="o">=</span> <span class="n">point</span><span class="p">.</span><span class="n">offset</span>
+    <span class="n">bincount</span> <span class="o">=</span> <span class="nf">offset2bincount</span><span class="p">(</span><span class="n">offset</span><span class="p">)</span>  <span class="c1"># [1000, 1500, 800]
+</span>    
+    <span class="c1"># Compute the required padding for each cloud
+</span>    <span class="n">bincount_pad</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">torch</span><span class="p">.</span><span class="nf">div</span><span class="p">(</span>
+            <span class="n">bincount</span> <span class="o">+</span> <span class="n">self</span><span class="p">.</span><span class="n">patch_size</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span>
+            <span class="n">self</span><span class="p">.</span><span class="n">patch_size</span><span class="p">,</span>
+            <span class="n">rounding_mode</span><span class="o">=</span><span class="sh">"</span><span class="s">trunc</span><span class="sh">"</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="o">*</span> <span class="n">self</span><span class="p">.</span><span class="n">patch_size</span>
+    <span class="p">)</span>
+</code></pre></div></div> <p><strong>Padding computation:</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">bincount</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1000</span><span class="p">,</span> <span class="mi">1500</span><span class="p">,</span> <span class="mi">800</span><span class="p">]</span>
+<span class="n">patch_size</span> <span class="o">=</span> <span class="mi">1024</span>
+
+<span class="c1"># For each cloud, round up to the next multiple of patch_size
+</span><span class="n">bincount_pad</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="nf">ceil</span><span class="p">(</span><span class="mi">1000</span> <span class="o">/</span> <span class="mi">1024</span><span class="p">)</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">=</span> <span class="mi">1024</span><span class="p">,</span>
+    <span class="nf">ceil</span><span class="p">(</span><span class="mi">1500</span> <span class="o">/</span> <span class="mi">1024</span><span class="p">)</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">=</span> <span class="mi">2048</span><span class="p">,</span>
+    <span class="nf">ceil</span><span class="p">(</span><span class="mi">800</span> <span class="o">/</span> <span class="mi">1024</span><span class="p">)</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">=</span> <span class="mi">1024</span>
+<span class="p">]</span>
+
+<span class="c1"># Sizes after padding
+</span><span class="n">Cloud</span> <span class="mi">0</span><span class="p">:</span> <span class="mi">1000</span> <span class="err">→</span> <span class="mi">1024</span> <span class="p">(</span><span class="o">+</span><span class="mi">24</span> <span class="n">padded</span> <span class="n">points</span><span class="p">)</span>
+<span class="n">Cloud</span> <span class="mi">1</span><span class="p">:</span> <span class="mi">1500</span> <span class="err">→</span> <span class="mi">2048</span> <span class="p">(</span><span class="o">+</span><span class="mi">548</span> <span class="n">padded</span> <span class="n">points</span><span class="p">)</span>
+<span class="n">Cloud</span> <span class="mi">2</span><span class="p">:</span> <span class="mi">800</span> <span class="err">→</span> <span class="mi">1024</span> <span class="p">(</span><span class="o">+</span><span class="mi">224</span> <span class="n">padded</span> <span class="n">points</span><span class="p">)</span>
+</code></pre></div></div> <p><strong>Structure after padding:</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Total padded: 1024 + 2048 + 1024 = 4096 points
+</span>
+<span class="n">qkv_padded</span><span class="p">:</span> <span class="p">(</span><span class="mi">4096</span><span class="p">,</span> <span class="mi">3</span><span class="n">C</span><span class="p">)</span>
+
+<span class="c1"># [0:1024] Cloud 0 (1000 real + 24 padded)
+# [1024:3072] Cloud 1 (1500 real + 548 padded)
+# [3072:4096] Cloud 2 (800 real + 224 padded)
+</span></code></pre></div></div> <p><strong>Patch splitting:</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">Patch</span> <span class="mi">0</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1024</span><span class="p">]</span>       <span class="c1"># Cloud 0 only ✓
+</span><span class="n">Patch</span> <span class="mi">1</span><span class="p">:</span> <span class="p">[</span><span class="mi">1024</span><span class="p">:</span><span class="mi">2048</span><span class="p">]</span>    <span class="c1"># Cloud 1 only ✓
+</span><span class="n">Patch</span> <span class="mi">2</span><span class="p">:</span> <span class="p">[</span><span class="mi">2048</span><span class="p">:</span><span class="mi">3072</span><span class="p">]</span>    <span class="c1"># Cloud 1 only ✓
+</span><span class="n">Patch</span> <span class="mi">3</span><span class="p">:</span> <span class="p">[</span><span class="mi">3072</span><span class="p">:</span><span class="mi">4096</span><span class="p">]</span>    <span class="c1"># Cloud 2 only ✓
+</span></code></pre></div></div> <p><strong>Now each patch belongs to ONE cloud only!</strong></p> <h3 id="how-are-the-padded-points-created">How Are the Padded Points Created?</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Padded points are REPETITIONS of the last points from the last incomplete patch
+</span>
+<span class="c1"># Cloud 0: 1000 points, needs 24 padding points
+# Last incomplete patch of cloud 0: points [0:1000]
+# This patch should have 1024 points but only has 1000
+</span>
+<span class="c1"># The last 24 points of this patch (points [976:1000]) are repeated
+</span><span class="n">pad_indices</span> <span class="o">=</span> <span class="p">[</span><span class="mi">976</span><span class="p">,</span> <span class="mi">977</span><span class="p">,</span> <span class="p">...,</span> <span class="mi">999</span><span class="p">,</span> <span class="mi">976</span><span class="p">,</span> <span class="mi">977</span><span class="p">,</span> <span class="p">...,</span> <span class="mi">999</span><span class="p">]</span>
+<span class="c1">#              └─ Repeated to reach 1024 ─┘
+</span></code></pre></div></div> <p><strong>Result:</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Patch 0 after padding
+</span><span class="n">real_points</span> <span class="o">=</span> <span class="n">qkv</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1000</span><span class="p">]</span>       <span class="c1"># 1000 points
+</span><span class="n">padded_points</span> <span class="o">=</span> <span class="n">qkv</span><span class="p">[</span><span class="mi">976</span><span class="p">:</span><span class="mi">1000</span><span class="p">]</span>   <span class="c1"># Repeated to make 24 more
+</span>
+<span class="n">patch_0</span> <span class="o">=</span> <span class="p">[</span><span class="n">real_points</span><span class="p">,</span> <span class="n">padded_points</span><span class="p">]</span>  <span class="c1"># 1024 total points
+</span></code></pre></div></div> <p><strong>Impact on attention:</strong></p> <p>The padded points are <strong>duplicates</strong>, so the attention computed on them is redundant but <strong>harmless</strong> because:</p> <ol> <li>They belong to the same cloud (no inter-cloud mixing)</li> <li>They are removed after attention via <code class="language-plaintext highlighter-rouge">unpad</code> <h2 id="final-comparison-ptv2-vs-ptv3">Final Comparison: PTv2 vs PTv3</h2> </li> </ol> <h3 id="ptv2-explicit-separation-via-k-nn">PTv2: Explicit Separation via K-NN</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># K-NN with offset
+</span><span class="n">reference_index</span> <span class="o">=</span> <span class="nf">knn_query</span><span class="p">(</span><span class="n">K</span><span class="p">,</span> <span class="n">coord</span><span class="p">,</span> <span class="n">offset</span><span class="p">)</span>
+<span class="c1">#                                      ↑
+#                                   Explicit boundaries
+</span>
+<span class="c1"># For each point, searches K neighbors WITHIN ITS OWN CLOUD
+# → Separation guaranteed by construction
+</span></code></pre></div></div> <h3 id="ptv3-implicit-separation-via-serialization--padding">PTv3: Implicit Separation via Serialization + Padding</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># 1. Serialization encodes the batch into a code
+</span><span class="n">code</span> <span class="o">=</span> <span class="nf">encode</span><span class="p">(</span><span class="n">grid_coord</span><span class="p">,</span> <span class="n">batch</span><span class="p">,</span> <span class="n">depth</span><span class="p">,</span> <span class="n">order</span><span class="p">)</span>
+<span class="c1"># → Points from different clouds get very different codes
+</span>
+<span class="c1"># 2. Sort by code
+</span><span class="n">order</span> <span class="o">=</span> <span class="nf">argsort</span><span class="p">(</span><span class="n">code</span><span class="p">)</span>
+<span class="c1"># → Points from the same cloud become contiguous
+</span>
+<span class="c1"># 3. Padding
+</span><span class="n">bincount_pad</span> <span class="o">=</span> <span class="nf">ceil</span><span class="p">(</span><span class="n">bincount</span> <span class="o">/</span> <span class="n">patch_size</span><span class="p">)</span> <span class="o">*</span> <span class="n">patch_size</span>
+<span class="c1"># → Each cloud has a number of points that is a multiple of patch_size
+</span>
+<span class="c1"># 4. Patch splitting
+</span><span class="n">patches</span> <span class="o">=</span> <span class="nf">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">patch_size</span><span class="p">,</span> <span class="p">...)</span>
+<span class="c1"># → Each patch contains ONE cloud only
+</span>
+<span class="c1"># 5. Attention Q @ K^T
+</span><span class="n">attn</span> <span class="o">=</span> <span class="n">q</span> <span class="o">@</span> <span class="n">k</span><span class="p">.</span><span class="n">T</span>  <span class="c1"># PER PATCH
+# → Attention is intra-patch = intra-cloud ✓
+</span></code></pre></div></div> <h2 id="flash-attention-integration">Flash Attention Integration</h2> <p>PTv3 can leverage <strong>Flash Attention</strong> for massive speedups. Here’s what changes:</p> <h3 id="standard-attention-memory-bound">Standard Attention (memory-bound)</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Computes full attention matrix
+</span><span class="n">attn</span> <span class="o">=</span> <span class="p">(</span><span class="n">Q</span> <span class="o">@</span> <span class="n">K</span><span class="p">.</span><span class="n">T</span><span class="p">)</span> <span class="o">/</span> <span class="nf">sqrt</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>  <span class="c1"># O(N²) memory!
+</span><span class="n">attn</span> <span class="o">=</span> <span class="nf">softmax</span><span class="p">(</span><span class="n">attn</span><span class="p">)</span>
+<span class="n">out</span> <span class="o">=</span> <span class="n">attn</span> <span class="o">@</span> <span class="n">V</span>
+</code></pre></div></div> <h3 id="flash-attention-compute-optimal">Flash Attention (compute-optimal)</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Never materializes full attention matrix
+</span><span class="n">out</span> <span class="o">=</span> <span class="nf">flash_attn_varlen_qkvpacked_func</span><span class="p">(</span>
+    <span class="n">qkv</span><span class="p">,</span>  <span class="c1"># Packed QKV
+</span>    <span class="n">cu_seqlens</span><span class="p">,</span>  <span class="c1"># Cumulative sequence lengths
+</span>    <span class="n">max_seqlen</span><span class="o">=</span><span class="n">patch_size</span><span class="p">,</span>
+    <span class="n">dropout_p</span><span class="o">=</span><span class="n">attn_drop</span><span class="p">,</span>
+    <span class="n">softmax_scale</span><span class="o">=</span><span class="n">scale</span>
+<span class="p">)</span>
+<span class="c1"># Uses tiling and recomputation to avoid O(N²) memory
+</span></code></pre></div></div> <p>The speedup is dramatic - up to <strong>10× faster</strong> for large patches, while using <strong>10× less memory</strong>.</p> <hr/> <h2 id="block-architecture-residual-learning-with-cpe">Block Architecture: Residual Learning with CPE</h2> <p>Each <code class="language-plaintext highlighter-rouge">Block</code> in PTv3 combines attention with <strong>Conditional Position Encoding (CPE)</strong> via sparse convolutions:</p> <pre><code class="language-mermaid">graph LR
+    subgraph BLOCK_COMPACT["🧱 BLOCK"]
+        direction TB
+        
+        IN["Input&lt;br/&gt;(N, C)"]
+        
+        subgraph B1["CPE"]
+            C1["SubMConv3d 3×3×3&lt;br/&gt;+ Linear + Norm"]
+            C2["⊕"]
+        end
+        
+        subgraph B2["Attention"]
+            A1["LayerNorm"]
+            A2["SerializedAttention&lt;br/&gt;patches + Q@K^T"]
+            A3["DropPath"]
+            A4["⊕"]
+        end
+        
+        subgraph B3["MLP"]
+            M1["LayerNorm"]
+            M2["FC(C→4C) + GELU&lt;br/&gt;+ FC(4C→C)"]
+            M3["DropPath"]
+            M4["⊕"]
+        end
+        
+        OUT["Output&lt;br/&gt;(N, C)"]
+        
+        IN --&gt; C1
+        C1 --&gt; C2
+        IN -.-&gt;|skip| C2
+        
+        C2 --&gt; A1
+        A1 --&gt; A2
+        A2 --&gt; A3
+        A3 --&gt; A4
+        C2 -.-&gt;|skip| A4
+        
+        A4 --&gt; M1
+        M1 --&gt; M2
+        M2 --&gt; M3
+        M3 --&gt; M4
+        A4 -.-&gt;|skip| M4
+        
+        M4 --&gt; OUT
+    end
+    
+    classDef compactStyle fill:#e3f2fd,stroke:#2196f3,stroke-width:2px,color:#000
+    class IN,C1,C2,A1,A2,A3,A4,M1,M2,M3,M4,OUT compactStyle
+</code></pre> <h3 id="the-cpe-innovation">The CPE Innovation</h3> <p>Unlike PTv2 which encoded positions explicitly in attention, PTv3 uses <strong>sparse 3D convolutions</strong> as implicit position encoding:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">self</span><span class="p">.</span><span class="n">cpe</span> <span class="o">=</span> <span class="nc">PointSequential</span><span class="p">(</span>
+    <span class="n">spconv</span><span class="p">.</span><span class="nc">SubMConv3d</span><span class="p">(</span>
+        <span class="n">channels</span><span class="p">,</span> <span class="n">channels</span><span class="p">,</span>
+        <span class="n">kernel_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+        <span class="n">bias</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+        <span class="n">indice_key</span><span class="o">=</span><span class="n">cpe_indice_key</span>
+    <span class="p">),</span>
+    <span class="n">nn</span><span class="p">.</span><span class="nc">Linear</span><span class="p">(</span><span class="n">channels</span><span class="p">,</span> <span class="n">channels</span><span class="p">),</span>
+    <span class="nf">norm_layer</span><span class="p">(</span><span class="n">channels</span><span class="p">)</span>
+<span class="p">)</span>
+</code></pre></div></div> <p>This serves multiple purposes:</p> <ol> <li><strong>Captures local geometry</strong> through 3×3×3 neighborhoods</li> <li><strong>Maintains sparsity</strong> (SubMConv doesn’t change point locations)</li> <li><strong>Provides position-aware features</strong> without explicit encoding</li> </ol> <hr/> <h2 id="serializedpooling-hierarchical-decimation">SerializedPooling: Hierarchical Decimation</h2> <p>Unlike PTv2’s voxel aggregation, PTv3’s pooling works directly on serialization codes:</p> <pre><code class="language-mermaid">graph TB
+    subgraph POOL["⬇️ SerializedPooling (stride=2)"]
+        direction TB
+        
+        INPUT_P["Input&lt;br/&gt;(N, C_in)&lt;br/&gt;+ serialized_code&lt;br/&gt;+ serialized_order/inverse&lt;br/&gt;+ serialized_depth"]
+        
+        subgraph PREP_P["🔧 Preparation"]
+            P1["pooling_depth =&lt;br/&gt;(stride-1).bit_length()&lt;br/&gt;stride=2 → depth=1"]
+            P2["Bit Shift Codes&lt;br/&gt;code = serialized_code &gt;&gt; (depth×3)&lt;br/&gt;Group nearby pointss"]
+        end
+        
+        subgraph CLUSTER["🎯 Clustering"]
+            C1["torch.unique(code[0])&lt;br/&gt;→ code_, cluster, counts"]
+            C2["Sort by cluster&lt;br/&gt;indices = argsort(cluster)"]
+            C3["Index pointers&lt;br/&gt;idx_ptr = cumsum(counts)"]
+            C4["Head indices&lt;br/&gt;head_indices = indices[idx_ptr[:-1]]&lt;br/&gt;1 representative per cluster"]
+        end
+        
+        subgraph AGGREGATE["📊 Aggregation"]
+            A1["Projection&lt;br/&gt;Linear(C_in, C_out)"]
+            A2["Aggregate Features&lt;br/&gt;segment_csr(feat[indices], reduce='max')&lt;br/&gt;(N, C_out) → (M, C_out)"]
+            A3["Aggregate Coords&lt;br/&gt;segment_csr(coord[indices], reduce='mean')&lt;br/&gt;(N, 3) → (M, 3)"]
+            A4["Update grid_coord&lt;br/&gt;grid_coord[head_indices] &gt;&gt; depth"]
+        end
+        
+        subgraph RECODE["🔄 Re-serialization"]
+            R1["New codes&lt;br/&gt;code = code[:, head_indices]"]
+            R2["New order&lt;br/&gt;order = argsort(code)"]
+            R3["New inverse&lt;br/&gt;inverse mapping"]
+            R4["Shuffle orders&lt;br/&gt;(optionnel)"]
+        end
+        
+        subgraph COLLECT["📦 Data"]
+            CO1["Create Point dict:&lt;br/&gt;feat (M, C_out)&lt;br/&gt;coord (M, 3)&lt;br/&gt;grid_coord (M, 3)"]
+            CO2["serialized_code/order/inverse&lt;br/&gt;serialized_depth - pooling_depth&lt;br/&gt;batch[head_indices]"]
+            CO3["Traceable:&lt;br/&gt;pooling_inverse = cluster&lt;br/&gt;pooling_parent = point"]
+        end
+        
+        POST_P["Norm + Activation&lt;br/&gt;(optionnel)"]
+        SPARS["Sparsify&lt;br/&gt;→ sparse_conv_feat"]
+        OUTPUT_P["Output&lt;br/&gt;(M, C_out)&lt;br/&gt;M = N/stride&lt;br/&gt;+ pooling_inverse&lt;br/&gt;+ pooling_parent"]
+        
+        INPUT_P --&gt; P1
+        P1 --&gt; P2
+        P2 --&gt; C1
+        C1 --&gt; C2
+        C2 --&gt; C3
+        C3 --&gt; C4
+        
+        C4 --&gt; A1
+        A1 --&gt; A2
+        C4 --&gt; A3
+        C4 --&gt; A4
+        
+        A2 --&gt; R1
+        A3 --&gt; R1
+        A4 --&gt; R1
+        R1 --&gt; R2
+        R2 --&gt; R3
+        R3 --&gt; R4
+        
+        R4 --&gt; CO1
+        CO1 --&gt; CO2
+        CO2 --&gt; CO3
+        CO3 --&gt; POST_P
+        POST_P --&gt; SPARS
+        SPARS --&gt; OUTPUT_P
+    end
+    
+    classDef inputStyle fill:#e1f5e1,stroke:#4caf50,stroke-width:3px,color:#000
+    classDef prepStyle fill:#fff3e0,stroke:#ff9800,stroke-width:2px,color:#000
+    classDef clusterStyle fill:#e3f2fd,stroke:#2196f3,stroke-width:2px,color:#000
+    classDef aggStyle fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px,color:#000
+    classDef recodeStyle fill:#fff9c4,stroke:#fbc02d,stroke-width:2px,color:#000
+    classDef outputStyle fill:#c8e6c9,stroke:#4caf50,stroke-width:3px,color:#000
+    
+    class INPUT_P inputStyle
+    class P1,P2 prepStyle
+    class C1,C2,C3,C4 clusterStyle
+    class A1,A2,A3,A4 aggStyle
+    class R1,R2,R3,R4,CO1,CO2,CO3 recodeStyle
+    class POST_P,SPARS,OUTPUT_P outputStyle
+</code></pre> <h1 id="serializedpooling-downsampling-by-code-grouping">SerializedPooling: Downsampling by Code Grouping</h1> <h2 id="general-principle">General Principle</h2> <p><strong>SerializedPooling</strong> performs downsampling by <strong>grouping nearby points along the serialization curve</strong> (Z-order, Hilbert).</p> <h3 id="key-idea-bit-shifting-on-codes">Key Idea: Bit Shifting on Codes</h3> <p>Instead of voxelizing space (as in GridPool from PTv2), PTv3 leverages <strong>serialization codes</strong>:</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>If stride = 2 → group pairs of consecutive points  
+If stride = 4 → group sets of 4 points  
+If stride = 8 → group sets of 8 points
+</code></pre></div></div> <p><strong>How?</strong> By <strong>removing the least significant bits</strong> from the serialization codes!</p> <h2 id="reminder-serialization-codes">Reminder: Serialization Codes</h2> <h3 id="code-structure">Code Structure</h3> <p>Serialization codes (Z-order, Hilbert) encode a point’s 3D position into a <strong>64-bit integer</strong>:</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Z-order code for a point at position (x, y, z)
+# Bits are interleaved: ...zyx zyx zyx zyx
+</span>
+<span class="c1"># Simplified example with depth=3 (3 bits per dimension)
+</span><span class="n">Point</span> <span class="nf">at </span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="k">with</span> <span class="n">depth</span><span class="o">=</span><span class="mi">3</span>
+<span class="n">x</span> <span class="o">=</span> <span class="mi">5</span> <span class="o">=</span> <span class="mi">101</span> <span class="p">(</span><span class="n">binary</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="mi">3</span> <span class="o">=</span> <span class="mi">011</span>
+<span class="n">z</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">=</span> <span class="mi">010</span>
+
+<span class="c1"># Interleaved Z-order code:
+</span><span class="n">code</span> <span class="o">=</span> <span class="n">z</span><span class="err">₂</span><span class="n">y</span><span class="err">₂</span><span class="n">x</span><span class="err">₂</span> <span class="n">z</span><span class="err">₁</span><span class="n">y</span><span class="err">₁</span><span class="n">x</span><span class="err">₁</span> <span class="n">z</span><span class="err">₀</span><span class="n">y</span><span class="err">₀</span><span class="n">x</span><span class="err">₀</span>
+     <span class="o">=</span> <span class="mi">0</span> <span class="mi">1</span> <span class="mi">1</span>  <span class="mi">1</span> <span class="mi">1</span> <span class="mi">0</span>  <span class="mi">0</span> <span class="mi">1</span> <span class="mi">1</span>
+     <span class="o">=</span> <span class="mi">01110011</span> <span class="p">(</span><span class="n">binary</span><span class="p">)</span>
+     <span class="o">=</span> <span class="mi">115</span> <span class="p">(</span><span class="n">decimal</span><span class="p">)</span>
+</code></pre></div></div> <h3 id="key-property">Key Property</h3> <p><strong>Nearby points in 3D space have similar codes</strong> (they differ by only a few bits).</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Neighboring points in a 2×2×2 cube:
+Point A: (0,0,0) → code = 000 000 000
+Point B: (1,0,0) → code = 000 000 001
+Point C: (0,1,0) → code = 000 010 000
+Point D: (1,1,0) → code = 000 010 001
+...
+
+All share the same high-order bits!
+</code></pre></div></div> <hr/> <h2 id="step-by-step">Step by Step</h2> <h3 id="example-setup">Example Setup</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">N</span> <span class="o">=</span> <span class="mi">16</span> <span class="n">points</span>
+<span class="n">stride</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># We want to downsample by 2
+</span><span class="n">depth</span> <span class="o">=</span> <span class="mi">4</span>   <span class="c1"># Serialization depth
+</span></code></pre></div></div> <h3 id="step-1-compute-pooling_depth">STEP 1: Compute pooling_depth</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">pooling_depth</span> <span class="o">=</span> <span class="p">(</span><span class="n">math</span><span class="p">.</span><span class="nf">ceil</span><span class="p">(</span><span class="n">self</span><span class="p">.</span><span class="n">stride</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">).</span><span class="nf">bit_length</span><span class="p">()</span>
+</code></pre></div></div> <p><strong>Idea:</strong> Determine how many bits to remove to reach the desired stride.</p> <p><strong>Explanation:</strong></p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>stride = 2  → pooling_depth = 1  (remove 1 level)
+stride = 4  → pooling_depth = 2  (remove 2 levels)
+stride = 8  → pooling_depth = 3  (remove 3 levels)
+
+Formula: stride = 2^pooling_depth
+</code></pre></div></div> <hr/> <h3 id="step-2-bit-shifting-the-codes">STEP 2: Bit Shifting the Codes</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">code</span> <span class="o">=</span> <span class="n">point</span><span class="p">.</span><span class="n">serialized_code</span> <span class="o">&gt;&gt;</span> <span class="n">pooling_depth</span> <span class="o">*</span> <span class="mi">3</span>
+</code></pre></div></div> <p><strong>Idea:</strong> Drop the least significant bits to group nearby points.</p> <p><strong>Why <code class="language-plaintext highlighter-rouge">* 3</code>?</strong> Because each level encodes <strong>3 dimensions</strong> (x, y, z).</p> <h4 id="detailed-example">Detailed Example</h4> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Setup
+</span><span class="n">depth</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="n">pooling_depth</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">stride</span> <span class="o">=</span> <span class="mi">2</span>
+
+<span class="c1"># serialized_code for 16 points (simplified, binary)
+# Each code has 12 bits (4 levels × 3 bits)
+</span>
+<span class="n">point</span><span class="p">.</span><span class="n">serialized_code</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="mb">0b000000000000</span><span class="p">,</span>  <span class="c1"># Point 0: (0,0,0)
+</span>    <span class="mb">0b000000000001</span><span class="p">,</span>  <span class="c1"># Point 1: (1,0,0)
+</span>    <span class="mb">0b000000000010</span><span class="p">,</span>  <span class="c1"># Point 2: (0,1,0)
+</span>    <span class="mb">0b000000000011</span><span class="p">,</span>  <span class="c1"># Point 3: (1,1,0)
+</span>    <span class="mb">0b000000000100</span><span class="p">,</span>  <span class="c1"># Point 4: (0,0,1)
+</span>    <span class="mb">0b000000000101</span><span class="p">,</span>  <span class="c1"># Point 5: (1,0,1)
+</span>    <span class="mb">0b000000000110</span><span class="p">,</span>  <span class="c1"># Point 6: (0,1,1)
+</span>    <span class="mb">0b000000000111</span><span class="p">,</span>  <span class="c1"># Point 7: (1,1,1)
+</span>    <span class="mb">0b000000001000</span><span class="p">,</span>  <span class="c1"># Point 8: (2,0,0)
+</span>    <span class="mb">0b000000001001</span><span class="p">,</span>  <span class="c1"># Point 9: (3,0,0)
+</span>    <span class="mb">0b000000001010</span><span class="p">,</span>  <span class="c1"># Point 10: (2,1,0)
+</span>    <span class="mb">0b000000001011</span><span class="p">,</span>  <span class="c1"># Point 11: (3,1,0)
+</span>    <span class="mb">0b000000001100</span><span class="p">,</span>  <span class="c1"># Point 12: (2,0,1)
+</span>    <span class="mb">0b000000001101</span><span class="p">,</span>  <span class="c1"># Point 13: (3,0,1)
+</span>    <span class="mb">0b000000001110</span><span class="p">,</span>  <span class="c1"># Point 14: (2,1,1)
+</span>    <span class="mb">0b000000001111</span><span class="p">,</span>  <span class="c1"># Point 15: (3,1,1)
+</span><span class="p">]</span>  <span class="c1"># (16,)
+</span>
+<span class="c1"># Bit shift &gt;&gt; (pooling_depth * 3) = &gt;&gt; 3
+</span><span class="n">code_shifted</span> <span class="o">=</span> <span class="n">serialized_code</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span>
+
+<span class="n">code_shifted</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="mb">0b000000000000</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span> <span class="o">=</span> <span class="mb">0b000000000</span><span class="p">,</span>  <span class="c1"># Points 0–7 → 0
+</span>    <span class="mb">0b000000000001</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span> <span class="o">=</span> <span class="mb">0b000000000</span><span class="p">,</span>
+    <span class="mb">0b000000000010</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span> <span class="o">=</span> <span class="mb">0b000000000</span><span class="p">,</span>
+    <span class="mb">0b000000000011</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span> <span class="o">=</span> <span class="mb">0b000000000</span><span class="p">,</span>
+    <span class="mb">0b000000000100</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span> <span class="o">=</span> <span class="mb">0b000000000</span><span class="p">,</span>
+    <span class="mb">0b000000000101</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span> <span class="o">=</span> <span class="mb">0b000000000</span><span class="p">,</span>
+    <span class="mb">0b000000000110</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span> <span class="o">=</span> <span class="mb">0b000000000</span><span class="p">,</span>
+    <span class="mb">0b000000000111</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span> <span class="o">=</span> <span class="mb">0b000000000</span><span class="p">,</span>
+    <span class="mb">0b000000001000</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span> <span class="o">=</span> <span class="mb">0b000000001</span><span class="p">,</span>  <span class="c1"># Points 8–15 → 1
+</span>    <span class="mb">0b000000001001</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span> <span class="o">=</span> <span class="mb">0b000000001</span><span class="p">,</span>
+    <span class="mb">0b000000001010</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span> <span class="o">=</span> <span class="mb">0b000000001</span><span class="p">,</span>
+    <span class="mb">0b000000001011</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span> <span class="o">=</span> <span class="mb">0b000000001</span><span class="p">,</span>
+    <span class="mb">0b000000001100</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span> <span class="o">=</span> <span class="mb">0b000000001</span><span class="p">,</span>
+    <span class="mb">0b000000001101</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span> <span class="o">=</span> <span class="mb">0b000000001</span><span class="p">,</span>
+    <span class="mb">0b000000001110</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span> <span class="o">=</span> <span class="mb">0b000000001</span><span class="p">,</span>
+    <span class="mb">0b000000001111</span> <span class="o">&gt;&gt;</span> <span class="mi">3</span> <span class="o">=</span> <span class="mb">0b000000001</span><span class="p">,</span>
+<span class="p">]</span>
+
+<span class="c1"># Decimal form
+</span><span class="n">code_shifted</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+</code></pre></div></div> <p><strong>Result:</strong></p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>The 16 points are grouped into 2 clusters:
+- Cluster 0: points [0–7]   (code_shifted = 0)
+- Cluster 1: points [8–15]  (code_shifted = 1)
+
+stride=2 achieved! (16 points → 2 clusters)
+</code></pre></div></div> <hr/> <h3 id="step-3-cluster-identification">STEP 3: Cluster Identification</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">code_</span><span class="p">,</span> <span class="n">cluster</span><span class="p">,</span> <span class="n">counts</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">unique</span><span class="p">(</span>
+    <span class="n">code</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+    <span class="nb">sorted</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+    <span class="n">return_inverse</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+    <span class="n">return_counts</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div></div> <p><strong>Idea:</strong> Find unique codes and assign each point to a cluster.</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">code</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+
+<span class="c1"># torch.unique
+</span><span class="n">code_</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>  <span class="c1"># Unique codes
+</span><span class="n">cluster</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>  <span class="c1"># Cluster ID per point
+</span><span class="n">counts</span> <span class="o">=</span> <span class="p">[</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">]</span>  <span class="c1"># Number of points per cluster
+</span></code></pre></div></div> <hr/> <h3 id="step-4-sort-by-cluster">STEP 4: Sort by Cluster</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">_</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">sort</span><span class="p">(</span><span class="n">cluster</span><span class="p">)</span>
+</code></pre></div></div> <p><strong>Idea:</strong> Reorganize points so that points in the same cluster are contiguous.</p> <hr/> <h3 id="step-5-index-pointers">STEP 5: Index Pointers</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">idx_ptr</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">cat</span><span class="p">([</span><span class="n">counts</span><span class="p">.</span><span class="nf">new_zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="n">torch</span><span class="p">.</span><span class="nf">cumsum</span><span class="p">(</span><span class="n">counts</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)])</span>
+</code></pre></div></div> <p><strong>Idea:</strong> Create pointers delimiting each cluster.</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">counts</span> <span class="o">=</span> <span class="p">[</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">]</span>
+<span class="n">cumsum</span> <span class="o">=</span> <span class="p">[</span><span class="mi">8</span><span class="p">,</span> <span class="mi">16</span><span class="p">]</span>
+
+<span class="n">idx_ptr</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">16</span><span class="p">]</span>
+<span class="c1">#          ↑  ↑  ↑
+#          │  │  └─ End (16 points)
+#          │  └──── Cluster 1: indices [8:16]
+#          └────── Cluster 0: indices [0:8]
+</span></code></pre></div></div> <hr/> <h3 id="step-6-selecting-representatives-head_indices">STEP 6: Selecting Representatives (head_indices)</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">head_indices</span> <span class="o">=</span> <span class="n">indices</span><span class="p">[</span><span class="n">idx_ptr</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span>
+</code></pre></div></div> <p><strong>Idea:</strong> Choose <strong>one representative point</strong> per cluster (the first after sorting).</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">idx_ptr</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">16</span><span class="p">]</span>
+<span class="n">idx_ptr</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">]</span>
+
+<span class="n">indices</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">11</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">13</span><span class="p">,</span> <span class="mi">14</span><span class="p">,</span> <span class="mi">15</span><span class="p">]</span>
+
+<span class="n">head_indices</span> <span class="o">=</span> <span class="n">indices</span><span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">]]</span>
+             <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">]</span>
+</code></pre></div></div> <p><strong>Meaning:</strong></p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Cluster 0 → represented by point 0
+Cluster 1 → represented by point 8
+</code></pre></div></div> <p>These representative points inherit the <strong>metadata</strong> (batch, grid_coord, etc.).</p> <hr/> <h3 id="step-7-feature-aggregation">STEP 7: Feature Aggregation</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">feat_pooled</span> <span class="o">=</span> <span class="n">torch_scatter</span><span class="p">.</span><span class="nf">segment_csr</span><span class="p">(</span>
+    <span class="n">self</span><span class="p">.</span><span class="nf">proj</span><span class="p">(</span><span class="n">point</span><span class="p">.</span><span class="n">feat</span><span class="p">)[</span><span class="n">indices</span><span class="p">],</span> 
+    <span class="n">idx_ptr</span><span class="p">,</span> 
+    <span class="nb">reduce</span><span class="o">=</span><span class="n">self</span><span class="p">.</span><span class="nb">reduce</span>
+<span class="p">)</span>
+</code></pre></div></div> <p><strong>Idea:</strong> Aggregate features of all points within each cluster.</p> <h4 id="a-projection">a) Projection</h4> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">point</span><span class="p">.</span><span class="n">feat</span><span class="p">:</span> <span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="n">in_channels</span><span class="p">)</span>
+<span class="n">self</span><span class="p">.</span><span class="n">proj</span><span class="p">:</span> <span class="nc">Linear</span><span class="p">(</span><span class="n">in_channels</span><span class="p">,</span> <span class="n">out_channels</span><span class="p">)</span>
+
+<span class="n">feat_projected</span><span class="p">:</span> <span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="n">out_channels</span><span class="p">)</span>
+</code></pre></div></div> <h4 id="b-reordering">b) Reordering</h4> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">feat_projected</span><span class="p">[</span><span class="n">indices</span><span class="p">]:</span> <span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="n">out_channels</span><span class="p">)</span>
+<span class="c1"># Points sorted by cluster
+</span></code></pre></div></div> <h4 id="c-aggregation">c) Aggregation</h4> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># segment_csr aggregates according to idx_ptr
+</span><span class="n">feat_pooled</span> <span class="o">=</span> <span class="nf">segment_csr</span><span class="p">(</span><span class="n">feat_projected</span><span class="p">[</span><span class="n">indices</span><span class="p">],</span> <span class="n">idx_ptr</span><span class="p">,</span> <span class="nb">reduce</span><span class="o">=</span><span class="sh">"</span><span class="s">max</span><span class="sh">"</span><span class="p">)</span>
+
+<span class="c1"># For reduce="max" (default)
+</span><span class="n">feat_pooled</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="nf">max</span><span class="p">(</span><span class="n">feat_projected</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">8</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>   <span class="c1"># Cluster 0
+</span><span class="n">feat_pooled</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="nf">max</span><span class="p">(</span><span class="n">feat_projected</span><span class="p">[</span><span class="mi">8</span><span class="p">:</span><span class="mi">16</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>  <span class="c1"># Cluster 1
+</span>
+<span class="n">feat_pooled</span><span class="p">:</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">out_channels</span><span class="p">)</span>  <span class="c1"># 2 clusters
+</span></code></pre></div></div> <hr/> <h3 id="step-8--coordinate-aggregation">STEP 8 : Coordinate Aggregation</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">coord_pooled</span> <span class="o">=</span> <span class="n">torch_scatter</span><span class="p">.</span><span class="nf">segment_csr</span><span class="p">(</span>
+    <span class="n">point</span><span class="p">.</span><span class="n">coord</span><span class="p">[</span><span class="n">indices</span><span class="p">],</span> 
+    <span class="n">idx_ptr</span><span class="p">,</span> 
+    <span class="nb">reduce</span><span class="o">=</span><span class="sh">"</span><span class="s">mean</span><span class="sh">"</span>
+<span class="p">)</span>
+</code></pre></div></div> <p><strong>Idea:</strong> Mean position of points in each cluster.</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Cluster 0 contains points [0–7]
+</span><span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">8</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+<span class="p">]</span>
+
+<span class="n">coord_pooled</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="nf">mean</span><span class="p">(</span><span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">8</span><span class="p">])</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">]</span>
+
+<span class="c1"># Cluster 1 contains points [8–15]
+</span><span class="n">coord_pooled</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="nf">mean</span><span class="p">(</span><span class="n">coord</span><span class="p">[</span><span class="mi">8</span><span class="p">:</span><span class="mi">16</span><span class="p">])</span> <span class="o">=</span> <span class="p">[</span><span class="mf">2.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">]</span>
+
+<span class="n">coord_pooled</span><span class="p">:</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+</code></pre></div></div> <hr/> <h3 id="step-9-update-grid_coord">STEP 9: Update grid_coord</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">grid_coord_pooled</span> <span class="o">=</span> <span class="n">point</span><span class="p">.</span><span class="n">grid_coord</span><span class="p">[</span><span class="n">head_indices</span><span class="p">]</span> <span class="o">&gt;&gt;</span> <span class="n">pooling_depth</span>
+</code></pre></div></div> <p><strong>Idea:</strong> Discrete coordinates of representative points, bit-shifted.</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">head_indices</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">]</span>
+
+<span class="c1"># grid_coord of representatives
+</span><span class="n">point</span><span class="p">.</span><span class="n">grid_coord</span><span class="p">[</span><span class="n">head_indices</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>  <span class="c1"># Point 0
+</span>    <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>  <span class="c1"># Point 8
+</span><span class="p">]</span>
+
+<span class="c1"># Bit shift (divide by 2^pooling_depth)
+</span><span class="n">grid_coord_pooled</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">&gt;&gt;</span> <span class="mi">1</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+    <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">&gt;&gt;</span> <span class="mi">1</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+<span class="p">]</span>
+
+<span class="n">grid_coord_pooled</span><span class="p">:</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+</code></pre></div></div> <hr/> <h3 id="step-10-generate-new-serialization-codes">STEP 10: Generate New Serialization Codes</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">code</span> <span class="o">=</span> <span class="n">code</span><span class="p">[:,</span> <span class="n">head_indices</span><span class="p">]</span>
+<span class="n">order</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">argsort</span><span class="p">(</span><span class="n">code</span><span class="p">)</span>
+<span class="n">inverse</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">zeros_like</span><span class="p">(</span><span class="n">order</span><span class="p">).</span><span class="nf">scatter_</span><span class="p">(</span>
+    <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="n">index</span><span class="o">=</span><span class="n">order</span><span class="p">,</span>
+    <span class="n">src</span><span class="o">=</span><span class="n">torch</span><span class="p">.</span><span class="nf">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">code</span><span class="p">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">order</span><span class="p">.</span><span class="n">device</span><span class="p">).</span><span class="nf">repeat</span><span class="p">(</span>
+        <span class="n">code</span><span class="p">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">1</span>
+    <span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div></div> <p><strong>Idea:</strong> Create new serialized codes for the clusters.</p> <h4 id="a-selecting-codes">a) Selecting codes</h4> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># code after bit shift
+</span><span class="n">code</span><span class="p">:</span> <span class="p">(</span><span class="n">num_orders</span><span class="p">,</span> <span class="mi">16</span><span class="p">)</span>  <span class="c1"># All points
+</span>
+<span class="c1"># Select representatives
+</span><span class="n">code</span> <span class="o">=</span> <span class="n">code</span><span class="p">[:,</span> <span class="n">head_indices</span><span class="p">]</span>
+<span class="c1"># code: (num_orders, 2)
+</span>
+<span class="c1"># Example with 1 order
+</span><span class="n">code</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>  <span class="c1"># Codes of the 2 clusters
+</span></code></pre></div></div> <h4 id="b-generate-order">b) Generate order</h4> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">order</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">argsort</span><span class="p">(</span><span class="n">code</span><span class="p">)</span>
+<span class="c1"># order[0] = [0, 1]  # Already sorted
+</span>
+<span class="c1"># If code were [5, 2, 8, 1]
+# order would be [3, 1, 0, 2]  # Sorted indices
+</span></code></pre></div></div> <h4 id="c-generate-inverse">c) Generate inverse</h4> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># inverse[order] = arange(len(order))
+</span><span class="n">inverse</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>  <span class="c1"># Position of each cluster in the sorted order
+</span></code></pre></div></div> <hr/> <h3 id="step-11-shuffle-orders-optional">STEP 11: Shuffle Orders (Optional)</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if</span> <span class="n">self</span><span class="p">.</span><span class="n">shuffle_orders</span><span class="p">:</span>
+    <span class="n">perm</span> <span class="o">=</span> <span class="n">torch</span><span class="p">.</span><span class="nf">randperm</span><span class="p">(</span><span class="n">code</span><span class="p">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">code</span> <span class="o">=</span> <span class="n">code</span><span class="p">[</span><span class="n">perm</span><span class="p">]</span>
+    <span class="n">order</span> <span class="o">=</span> <span class="n">order</span><span class="p">[</span><span class="n">perm</span><span class="p">]</span>
+    <span class="n">inverse</span> <span class="o">=</span> <span class="n">inverse</span><span class="p">[</span><span class="n">perm</span><span class="p">]</span>
+</code></pre></div></div> <p><strong>Idea:</strong> Shuffle serialization orders for data augmentation.</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># If there are 4 orders [Z, Z-trans, Hilbert, Hilbert-trans]
+</span><span class="n">perm</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>  <span class="c1"># Random permutation
+</span>
+<span class="c1"># Orders are shuffled
+</span><span class="n">code</span> <span class="o">=</span> <span class="n">code</span><span class="p">[[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">]]</span>
+<span class="n">order</span> <span class="o">=</span> <span class="n">order</span><span class="p">[[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">]]</span>
+<span class="n">inverse</span> <span class="o">=</span> <span class="n">inverse</span><span class="p">[[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">]]</span>
+</code></pre></div></div> <hr/> <h3 id="step-12-collect-results">STEP 12: Collect Results</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">point_dict</span> <span class="o">=</span> <span class="nc">Dict</span><span class="p">(</span>
+    <span class="n">feat</span><span class="o">=</span><span class="n">feat_pooled</span><span class="p">,</span>                           <span class="c1"># (Ncluster, out_channels)
+</span>    <span class="n">coord</span><span class="o">=</span><span class="n">coord_pooled</span><span class="p">,</span>                         <span class="c1"># (Ncluster, 3)
+</span>    <span class="n">grid_coord</span><span class="o">=</span><span class="n">grid_coord_pooled</span><span class="p">,</span>               <span class="c1"># (Ncluster, 3)
+</span>    <span class="n">serialized_code</span><span class="o">=</span><span class="n">code</span><span class="p">,</span>                       <span class="c1"># (num_orders, Ncluster)
+</span>    <span class="n">serialized_order</span><span class="o">=</span><span class="n">order</span><span class="p">,</span>                     <span class="c1"># (num_orders, Ncluster)
+</span>    <span class="n">serialized_inverse</span><span class="o">=</span><span class="n">inverse</span><span class="p">,</span>                 <span class="c1"># (num_orders, Ncluster)
+</span>    <span class="n">serialized_depth</span><span class="o">=</span><span class="n">point</span><span class="p">.</span><span class="n">serialized_depth</span> <span class="o">-</span> <span class="n">pooling_depth</span><span class="p">,</span>  <span class="c1"># depth - 1
+</span>    <span class="n">batch</span><span class="o">=</span><span class="n">point</span><span class="p">.</span><span class="n">batch</span><span class="p">[</span><span class="n">head_indices</span><span class="p">],</span>            <span class="c1"># (Ncluster,)
+</span><span class="p">)</span>
+</code></pre></div></div> <p><strong>Result:</strong></p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># Before pooling
+</span><span class="n">N</span> <span class="o">=</span> <span class="mi">16</span> <span class="n">points</span>
+<span class="n">depth</span> <span class="o">=</span> <span class="mi">4</span>
+
+<span class="c1"># After pooling with stride=2
+</span><span class="n">Ncluster</span> <span class="o">=</span> <span class="mi">8</span>
+<span class="n">depth</span> <span class="o">=</span> <span class="mi">3</span>
+
+<span class="c1"># Features
+</span><span class="n">feat</span><span class="p">:</span> <span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="n">C</span><span class="p">)</span> <span class="err">→</span> <span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="n">C</span><span class="p">)</span>
+
+<span class="c1"># 2× downsampling achieved!
+</span></code></pre></div></div> <hr/> <h3 id="step-13-traceable">STEP 13: Traceable</h3> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">point_dict</span><span class="p">[</span><span class="sh">"</span><span class="s">pooling_inverse</span><span class="sh">"</span><span class="p">]</span> <span class="o">=</span> <span class="n">cluster</span>
+<span class="n">point_dict</span><span class="p">[</span><span class="sh">"</span><span class="s">pooling_parent</span><span class="sh">"</span><span class="p">]</span> <span class="o">=</span> <span class="n">point</span>
+</code></pre></div></div> <p><strong>Idea:</strong> Store the mapping for later unpooling.</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">pooling_inverse</span> <span class="o">=</span> <span class="n">cluster</span>
+<span class="c1"># cluster: (16,) = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
+# Points 0–7 → Cluster 0
+# Points 8–15 → Cluster 1
+</span>
+<span class="n">pooling_parent</span> <span class="o">=</span> <span class="n">point</span>  <span class="c1"># Reference to the pre-pooled point
+</span></code></pre></div></div> <p>These entries will be used in <strong>SerializedUnpooling</strong>.</p> <hr/> <h2 id="complete-visualization">Complete Visualization</h2> <h3 id="before-pooling">Before Pooling</h3> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>16 points in 3D space:
+    ●●●●
+    ●●●●
+    ●●●●
+    ●●●●
+
+serialized_code (after Z-order):
+[0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
+</code></pre></div></div> <h3 id="bit-shifting-stride2">Bit Shifting (stride=2)</h3> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>code &gt;&gt; 3 bits:
+[0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
+ └────── Cluster 0 ─────┘ └────── Cluster 1 ─────┘
+</code></pre></div></div> <h3 id="after-pooling">After Pooling</h3> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>2 clusters:
+    ◉◉
+    
+coord_pooled:
+Cluster 0: [0.5, 0.5, 0.5]  ← Mean of first 8 points
+Cluster 1: [2.5, 0.5, 0.5]  ← Mean of next 8 points
+
+feat_pooled:
+Cluster 0: max(feat[0:8])
+Cluster 1: max(feat[8:16])
+</code></pre></div></div> <p><strong>SerializedPooling</strong> workflow:</p> <ol> <li><strong>Bit-shift</strong> serialization codes to group nearby points</li> <li><strong>Identify</strong> clusters via <code class="language-plaintext highlighter-rouge">torch.unique</code></li> <li><strong>Aggregate</strong> features (max/mean/sum) and coordinates (mean) per cluster</li> <li><strong>Store</strong> mapping (<code class="language-plaintext highlighter-rouge">pooling_inverse</code>) for unpooling</li> <li><strong>Maintain</strong> separation between batch clouds</li> </ol> <p><strong>Advantages vs GridPool:</strong></p> <ul> <li>Directly exploits the structure of the serialization curve</li> <li>No need to define voxel size</li> <li>Flexible stride (powers of 2)</li> <li>Fully compatible with serialization</li> </ul> <h1 id="serializedunpooling--upsampling-with-skip-connections">SerializedUnpooling : Upsampling with Skip Connections</h1> <pre><code class="language-mermaid">graph TB
+    subgraph UNPOOL["⬆️ SerializedUnpooling"]
+        direction TB
+        
+        INPUT_U["Input (low res)&lt;br/&gt;(M, C_in)&lt;br/&gt;+ pooling_parent (N, C_skip)&lt;br/&gt;+ pooling_inverse (N,)"]
+        
+        subgraph EXTRACT["🔓 Extraction"]
+            E1["parent = point.pop('pooling_parent')&lt;br/&gt;High-resolution Parent (N, C_skip)"]
+            E2["inverse = point.pop('pooling_inverse')&lt;br/&gt;Mapping: point → cluster (N,)"]
+        end
+        
+        subgraph PROJECT["🔄 Projections"]
+            PR1["Point Projection&lt;br/&gt;Linear(C_in, C_out)&lt;br/&gt;(M, C_in) → (M, C_out)"]
+            PR2[" Norm + Activation"]
+            PR3["Parent Projection (skip)&lt;br/&gt;Linear(C_skip, C_out)&lt;br/&gt;(N, C_skip) → (N, C_out)"]
+            PR4["Norm + Activation"]
+        end
+        
+        subgraph UPSAMPLE["⬆️ Upsampling + Fusion"]
+            U1["Map Upsampling&lt;br/&gt;point.feat[inverse]&lt;br/&gt;(M, C_out) → (N, C_out)"]
+            U2["Example:&lt;br/&gt;inverse = [0,0,0,0,1,1,1,1]&lt;br/&gt;Point 0-3 → Cluster 0&lt;br/&gt;Point 4-7 → Cluster 1"]
+            U3["Skip Connection Fusion&lt;br/&gt;parent.feat = parent.feat + upsampled&lt;br/&gt;(N, C_out) + (N, C_out)"]
+        end
+        
+        TRACE["Traceable (optional)&lt;br/&gt;parent['unpooling_parent'] = point"]
+        OUTPUT_U["Output (high res)&lt;br/&gt;(N, C_out)&lt;br/&gt;Fused Features&lt;br/&gt;Resolution Restored"]
+        
+        %% Connexions triées
+        INPUT_U --&gt; E1
+        INPUT_U --&gt; E2
+        INPUT_U --&gt; PR1
+        
+        E1 --&gt; PR3
+        E2 --&gt; U1
+        PR1 --&gt; PR2
+        PR3 --&gt; PR4
+        PR2 --&gt; U1
+        PR4 --&gt; U3
+        U1 --&gt; U2
+        U2 --&gt; U3
+        U3 --&gt; TRACE
+        TRACE --&gt; OUTPUT_U
+    end
+    
+    %% Styles
+    classDef inputStyle fill:#e1f5e1,stroke:#4caf50,stroke-width:3px,color:#000
+    classDef extractStyle fill:#fff3e0,stroke:#ff9800,stroke-width:2px,color:#000
+    classDef projStyle fill:#e3f2fd,stroke:#2196f3,stroke-width:2px,color:#000
+    classDef upStyle fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px,color:#000
+    classDef outputStyle fill:#c8e6c9,stroke:#4caf50,stroke-width:3px,color:#000
+    
+    class INPUT_U inputStyle
+    class E1,E2 extractStyle
+    class PR1,PR2,PR3,PR4 projStyle
+    class U1,U2,U3 upStyle
+    class TRACE,OUTPUT_U outputStyle
+</code></pre> <hr/> <h2 id="general-philosophy">General Philosophy</h2> <p><strong>SerializedUnpooling</strong> performs the <strong>inverse</strong> of SerializedPooling:</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>SerializedPooling:
+    High resolution (N points) → Low resolution (M clusters)
+    + stores pooling_inverse
+
+SerializedUnpooling:
+    Low resolution (M clusters) → High resolution (N points)
+    + merges with skip connection
+    + uses pooling_inverse for mapping
+</code></pre></div></div> <p><strong>Analogy with PTv2:</strong></p> <ul> <li>PTv2: Unpooling uses <code class="language-plaintext highlighter-rouge">cluster_inverse</code></li> <li>PTv3: Unpooling uses <code class="language-plaintext highlighter-rouge">pooling_inverse</code></li> </ul> <p><strong>Key idea:</strong> Reuse the downsampling mapping to achieve upsampling efficiently.</p> <h2 id="summary">Summary</h2> <p><strong>SerializedUnpooling</strong>:</p> <ol> <li><strong>Retrieve</strong> the parent (skip) and the mapping (<code class="language-plaintext highlighter-rouge">pooling_inverse</code>)</li> <li><strong>Project</strong> low-resolution features to <code class="language-plaintext highlighter-rouge">out_channels</code></li> <li><strong>Project</strong> skip features to <code class="language-plaintext highlighter-rouge">out_channels</code></li> <li><strong>Free upsampling</strong>: <code class="language-plaintext highlighter-rouge">point.feat[pooling_inverse]</code></li> <li><strong>Fuse</strong>: <code class="language-plaintext highlighter-rouge">skip + upsampled</code></li> <li><strong>Return</strong> the parent with fused features</li> </ol> <p><strong>Advantages:</strong></p> <ul> <li>O(N) upsampling (free via indexing)</li> <li>Preserves batch structure</li> <li>Natural skip fusion</li> <li>No costly interpolation</li> </ul> <p><strong>Equivalent to Map Unpooling in PTv2, but adapted to PTv3’s serialized structure.</strong></p> <pre><code class="language-mermaid">graph TB
+    subgraph ENC_STAGE0["📦 Encoder Stage 0"]
+        direction TB
+        
+        ENC0_IN["Input from Stem&lt;br/&gt;(N, 32)"]
+        
+        NOTE["ℹ️ No Pooling at Stage 0"]
+        
+        BLOCKS0["🧱 Blocks × 2&lt;br/&gt;Block 0 (order=0)&lt;br/&gt;Block 1 (order=1)&lt;br/&gt;Each: CPE + Attn + MLP"]
+        
+        ENC0_OUT["Output&lt;br/&gt;(N, 32)&lt;br/&gt;Full resolution"]
+        
+        ENC0_IN --&gt; NOTE
+        NOTE --&gt; BLOCKS0
+        BLOCKS0 --&gt; ENC0_OUT
+    end
+    
+    classDef inputStyle fill:#e1f5e1,stroke:#4caf50,stroke-width:3px,color:#000
+    classDef noteStyle fill:#fff3e0,stroke:#ff9800,stroke-width:2px,color:#000
+    classDef blockStyle fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px,color:#000
+    classDef outputStyle fill:#c8e6c9,stroke:#4caf50,stroke-width:3px,color:#000
+    
+    class ENC0_IN inputStyle
+    class NOTE noteStyle
+    class BLOCKS0 blockStyle
+    class ENC0_OUT outputStyle
+</code></pre> <pre><code class="language-mermaid">graph TB
+    subgraph ENC_STAGE["📦 Encoder Stage s"]
+        direction TB
+        
+        ENC_IN["Input&lt;br/&gt;(N_{s-1}, C_{s-1})"]
+        
+        POOL["⬇️ SerializedPooling&lt;br/&gt;stride=2&lt;br/&gt;Bit-shift + Clustering&lt;br/&gt;(N_{s-1}, C_{s-1}) → (N_s, C_s)&lt;br/&gt;Stores: pooling_inverse + pooling_parent"]
+        
+        BLOCKS["🧱 Blocks × depth&lt;br/&gt;Block 0 (order=0)&lt;br/&gt;Block 1 (order=1)&lt;br/&gt;...&lt;br/&gt;Each: CPE + Attn + MLP"]
+        
+        ENC_OUT["Output&lt;br/&gt;(N_s, C_s)&lt;br/&gt;+ pooling_inverse&lt;br/&gt;+ pooling_parent"]
+        
+        ENC_IN --&gt; POOL
+        POOL --&gt; BLOCKS
+        BLOCKS --&gt; ENC_OUT
+    end
+    
+    classDef inputStyle fill:#e1f5e1,stroke:#4caf50,stroke-width:3px,color:#000
+    classDef poolStyle fill:#e3f2fd,stroke:#2196f3,stroke-width:2px,color:#000
+    classDef blockStyle fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px,color:#000
+    classDef outputStyle fill:#c8e6c9,stroke:#4caf50,stroke-width:3px,color:#000
+    
+    class ENC_IN inputStyle
+    class POOL poolStyle
+    class BLOCKS blockStyle
+    class ENC_OUT outputStyle
+</code></pre> <pre><code class="language-mermaid">graph TB
+    subgraph DEC_STAGE["📤 Decoder Stage s"]
+        direction TB
+        
+        DEC_IN["Input Low-Res&lt;br/&gt;(N_{s+1}, C_{s+1})&lt;br/&gt;+ pooling_inverse&lt;br/&gt;+ pooling_parent"]
+        
+        SKIP["Skip from Encoder&lt;br/&gt;(N_s, C_s)"]
+        
+        UNPOOL["⬆️ SerializedUnpooling&lt;br/&gt;Map upsampling + Skip fusion&lt;br/&gt;(N_{s+1}, C_{s+1}) + skip → (N_s, C_s)"]
+        
+        BLOCKS_DEC["🧱 Blocks × depth&lt;br/&gt;Block 0 (order=0)&lt;br/&gt;Block 1 (order=1)&lt;br/&gt;...&lt;br/&gt;Each: CPE + Attn + MLP"]
+        
+        DEC_OUT["Output&lt;br/&gt;(N_s, C_s)"]
+        
+        DEC_IN --&gt; UNPOOL
+        SKIP -.-&gt;|skip| UNPOOL
+        UNPOOL --&gt; BLOCKS_DEC
+        BLOCKS_DEC --&gt; DEC_OUT
+    end
+    
+    classDef inputStyle fill:#e1f5e1,stroke:#4caf50,stroke-width:3px,color:#000
+    classDef skipStyle fill:#fff9c4,stroke:#fbc02d,stroke-width:2px,color:#000
+    classDef unpoolStyle fill:#e3f2fd,stroke:#2196f3,stroke-width:2px,color:#000
+    classDef blockStyle fill:#f3e5f5,stroke:#9c27b0,stroke-width:2px,color:#000
+    classDef outputStyle fill:#c8e6c9,stroke:#4caf50,stroke-width:3px,color:#000
+    
+    class DEC_IN inputStyle
+    class SKIP skipStyle
+    class UNPOOL unpoolStyle
+    class BLOCKS_DEC blockStyle
+    class DEC_OUT outputStyle
+</code></pre> <h2 id="configuration-summary">Configuration Summary</h2> <table> <thead> <tr> <th>Stage</th> <th>Operation</th> <th>Input</th> <th>Output</th> <th>Blocks</th> <th>Heads</th> </tr> </thead> <tbody> <tr> <td><strong>Encoder 0</strong></td> <td>-</td> <td>(N, 32)</td> <td>(N, 32)</td> <td>2</td> <td>2</td> </tr> <tr> <td><strong>Encoder 1</strong></td> <td>Pool ×2</td> <td>(N, 32)</td> <td>(N/2, 64)</td> <td>2</td> <td>4</td> </tr> <tr> <td><strong>Encoder 2</strong></td> <td>Pool ×2</td> <td>(N/2, 64)</td> <td>(N/4, 128)</td> <td>2</td> <td>8</td> </tr> <tr> <td><strong>Encoder 3</strong></td> <td>Pool ×2</td> <td>(N/4, 128)</td> <td>(N/8, 256)</td> <td>6</td> <td>16</td> </tr> <tr> <td><strong>Encoder 4</strong></td> <td>Pool ×2</td> <td>(N/8, 256)</td> <td>(N/16, 512)</td> <td>2</td> <td>32</td> </tr> <tr> <td><strong>Decoder 3</strong></td> <td>Unpool ×2</td> <td>(N/16, 512)</td> <td>(N/8, 256)</td> <td>2</td> <td>16</td> </tr> <tr> <td><strong>Decoder 2</strong></td> <td>Unpool ×2</td> <td>(N/8, 256)</td> <td>(N/4, 128)</td> <td>2</td> <td>8</td> </tr> <tr> <td><strong>Decoder 1</strong></td> <td>Unpool ×2</td> <td>(N/4, 128)</td> <td>(N/2, 64)</td> <td>2</td> <td>4</td> </tr> <tr> <td><strong>Decoder 0</strong></td> <td>Unpool ×2</td> <td>(N/2, 64)</td> <td>(N, 64)</td> <td>2</td> <td>4</td> </tr> </tbody> </table> <p><strong>Note:</strong> All stages use <code class="language-plaintext highlighter-rouge">patch_size=1024</code> and cycle through 4 orders: <code class="language-plaintext highlighter-rouge">["z", "z-trans", "hilbert", "hilbert-trans"]</code>.</p> <div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># 4 orders: ["z", "z-trans", "hilbert", "hilbert-trans"]
+</span><span class="n">order_index</span> <span class="o">=</span> <span class="n">block_id</span> <span class="o">%</span> <span class="mi">4</span>
+
+<span class="n">Block</span> <span class="mi">0</span><span class="p">:</span> <span class="n">order_index</span><span class="o">=</span><span class="mi">0</span> <span class="err">→</span> <span class="n">z</span><span class="o">-</span><span class="n">order</span>
+<span class="n">Block</span> <span class="mi">1</span><span class="p">:</span> <span class="n">order_index</span><span class="o">=</span><span class="mi">1</span> <span class="err">→</span> <span class="n">z</span><span class="o">-</span><span class="n">trans</span>
+<span class="n">Block</span> <span class="mi">2</span><span class="p">:</span> <span class="n">order_index</span><span class="o">=</span><span class="mi">2</span> <span class="err">→</span> <span class="n">hilbert</span>
+<span class="n">Block</span> <span class="mi">3</span><span class="p">:</span> <span class="n">order_index</span><span class="o">=</span><span class="mi">3</span> <span class="err">→</span> <span class="n">hilbert</span><span class="o">-</span><span class="n">trans</span>
+<span class="n">Block</span> <span class="mi">4</span><span class="p">:</span> <span class="n">order_index</span><span class="o">=</span><span class="mi">0</span> <span class="err">→</span> <span class="n">z</span><span class="o">-</span><span class="nf">order </span><span class="p">(</span><span class="n">cycle</span> <span class="n">repeats</span><span class="p">)</span>
+</code></pre></div></div> <p>Different space-filling curves have different properties:</p> <ol> <li><strong>Z-order (Morton)</strong>: Fast to compute, good for axis-aligned features</li> <li><strong>Hilbert curve</strong>: Better locality preservation but more complex</li> <li><strong>Transposed versions</strong>: Capture different dominant directions</li> </ol> <p>By combining them, PTv3 captures spatial relationships from multiple perspectives:</p> <hr/> <h2 id="conclusion">Conclusion</h2> <h2 id="performance-comparison-with-ptv2">Performance Comparison with PTv2</h2> <p>Let’s compare the key architectural differences:</p> <table> <thead> <tr> <th>Component</th> <th>PTv2</th> <th>PTv3</th> </tr> </thead> <tbody> <tr> <td><strong>Spatial organization</strong></td> <td>Voxelization (GridPool)</td> <td>Serialization (Morton/Hilbert)</td> </tr> <tr> <td><strong>Attention type</strong></td> <td>GroupedVectorAttention</td> <td>Standard QKᵀ Attention</td> </tr> <tr> <td><strong>Attention scope</strong></td> <td>K nearest neighbors</td> <td>Fixed-size patches</td> </tr> <tr> <td><strong>Position encoding</strong></td> <td>Explicit relative positions</td> <td>Implicit via sparse conv (CPE)</td> </tr> <tr> <td><strong>Pooling</strong></td> <td>Voxel aggregation</td> <td>Serialization-based clustering</td> </tr> <tr> <td><strong>Multi-scale</strong></td> <td>Fixed voxel hierarchy</td> <td>Multiple orderings</td> </tr> <tr> <td><strong>Flash Attention</strong></td> <td>Not supported</td> <td>Native support</td> </tr> <tr> <td><strong>Parameters</strong></td> <td>~10M</td> <td>~46M (deeper model)</td> </tr> </tbody> </table> <h3 id="benchmark-results-s3dis-dataset">Benchmark Results (S3DIS Dataset)</h3> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Model      | mIoU  | Speed (ms) | Memory (GB)
+-----------|-------|------------|-------------
+PTv1       | 70.4  | 800        | 12
+PTv2       | 71.6  | 450        | 8
+PTv3       | 74.3  | 380        | 6 (with Flash)
+PTv3-XL    | 76.2  | 520        | 10
+</code></pre></div></div> <hr/> <h2 id="implementation-insights">Implementation Insights</h2> <h3 id="key-design-choices">Key Design Choices</h3> <ol> <li> <p><strong>Patch size = 1024</strong>: Large enough for meaningful attention patterns, small enough for memory efficiency</p> </li> <li> <p><strong>DropPath instead of Dropout</strong>: Regularization at the block level rather than feature level</p> </li> <li> <p><strong>Pre-norm architecture</strong>: LayerNorm before attention/MLP for training stability</p> </li> <li> <p><strong>Sparse convolutions for CPE</strong>: Leverages existing sparse structure for position encoding</p> </li> </ol> <hr/> <p>Point Transformer v3 represents a philosophical shift in point cloud processing. By embracing serialization over voxelization, it achieves:</p> <ol> <li><strong>Simplicity</strong>: Standard transformer blocks work directly on serialized points</li> <li><strong>Efficiency</strong>: Flash Attention and serialization-based pooling reduce complexity</li> <li><strong>Flexibility</strong>: Multiple orderings capture different spatial relationships</li> <li><strong>Scalability</strong>: Can handle larger point clouds with less memory</li> </ol> <p>The key insight - that space-filling curves can bridge the gap between unstructured 3D points and structured 1D sequences - opens new possibilities for applying standard NLP architectures to 3D data. As transformers continue to dominate across modalities, PTv3 shows that point clouds need not be an exception.</p> <p>For those implementing PTv3, remember:</p> <ul> <li>Start with serialization (Morton codes are simplest)</li> <li>Use Flash Attention if available (massive speedup)</li> <li>Experiment with different orderings for your data</li> <li>Consider PDNorm for multi-dataset training</li> </ul> <p>The journey from PTv1’s point-based attention to PTv2’s voxel-based processing to PTv3’s serialization-based approach shows the rapid evolution of point cloud architectures. Each iteration brings us closer to a unified transformer architecture that works across all data modalities - text, images, and now 3D points.</p>]]></content><author><name></name></author><category term="computer-vision"/><category term="deep-learning"/><category term="point-cloud"/><category term="transformer"/><category term="architecture"/><summary type="html"><![CDATA[Deep dive into Point Transformer v3's serialization-based architecture and its improvements over PTv2]]></summary></entry><entry><title type="html">From 3D Clouds to 1D Sequences — Understanding Point Cloud Serialization</title><link href="http://antoineach.github.io//blog/2025/pointSerialisation/" rel="alternate" type="text/html" title="From 3D Clouds to 1D Sequences — Understanding Point Cloud Serialization"/><published>2025-10-29T00:00:00+00:00</published><updated>2025-10-29T00:00:00+00:00</updated><id>http://antoineach.github.io//blog/2025/pointSerialisation</id><content type="html" xml:base="http://antoineach.github.io//blog/2025/pointSerialisation/"><![CDATA[<h2 id="1-why-serialization-matters">1. Why serialization matters</h2> <p>Traditional point cloud models like <strong>PointTransformerV1</strong> or <strong>PointNet++</strong> operate on <strong>unordered sets</strong> of points.</p> <p>To define local neighborhoods, they rely on:</p> <ul> <li>FPS (Farthest Point Sampling),</li> <li>KNN (K-Nearest Neighbors),</li> <li>or Grid/Voxel pooling.</li> </ul> <p>Those operations create small groups (patches) of points, shaped like <code class="language-plaintext highlighter-rouge">[N, K, C]</code>, where:</p> <ul> <li><code class="language-plaintext highlighter-rouge">N</code> = number of center points,</li> <li><code class="language-plaintext highlighter-rouge">K</code> = number of neighbors,</li> <li><code class="language-plaintext highlighter-rouge">C</code> = number of features.</li> </ul> <p>But in <strong>PointTransformerV3</strong> or <strong>PointMamba</strong>, this paradigm shifts:</p> <blockquote> <p>The entire point cloud becomes a single ordered <strong>sequence</strong> <code class="language-plaintext highlighter-rouge">[L, C]</code>.</p> </blockquote> <p>So we need a <strong>consistent way to order points in 3D</strong>.<br/> That’s what <strong>serialization</strong> does.</p> <hr/> <h2 id="2-the-z-order-morton-order-curve">2. The Z-order (Morton order) curve</h2> <p>We can’t directly sort 3D coordinates <code class="language-plaintext highlighter-rouge">(x, y, z)</code> — it’s not one-dimensional.<br/> But we can <strong>map</strong> each 3D point to a <strong>single integer key</strong> that roughly preserves spatial proximity.</p> <p>This mapping is called the <strong>Morton code</strong> or <strong>Z-order</strong>.</p> <h3 id="example-in-2d-for-visualization">Example in 2D (for visualization)</h3> <p>Below is a Z-order traversal of a 4×4 grid (2 bits per axis):</p> <figure> <picture> <img src="/assets/img/pointTransformerV3/z_order.png" class="img-fluid rounded z-depth-1 shadow-sm" width="100%" height="auto" loading="eager" onerror="this.onerror=null; $('.responsive-img-srcset').remove();"/> </picture> </figure> <p>In this curve:</p> <ul> <li>Each cell <code class="language-plaintext highlighter-rouge">(x, y)</code> is assigned a <strong>Z-shaped index</strong>.</li> <li>Cells that are close in space get <strong>close indices</strong>.</li> <li>When we sort points by this index, we obtain a <strong>spatially coherent sequence</strong>.</li> </ul> <hr/> <h2 id="3-bit-interleaving-explained">3. Bit interleaving explained</h2> <p>Let’s take 3D integer coordinates <code class="language-plaintext highlighter-rouge">x, y, z</code> in binary.</p> <p>Suppose:</p> <ul> <li><code class="language-plaintext highlighter-rouge">x = 5 → 101₂</code></li> <li><code class="language-plaintext highlighter-rouge">y = 3 → 011₂</code></li> <li><code class="language-plaintext highlighter-rouge">z = 2 → 010₂</code></li> </ul> <p>Each number has 3 bits: <code class="language-plaintext highlighter-rouge">x₂x₁x₀</code>, <code class="language-plaintext highlighter-rouge">y₂y₁y₀</code>, <code class="language-plaintext highlighter-rouge">z₂z₁z₀</code>.</p> <p>The <strong>Morton encoding</strong> takes these bits and <strong>interleaves them</strong>:</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>
 Morton(x,y,z) = z2 y2 x2  z1 y1 x1  z0 y0 x0
 
 </code></pre></div></div> <p>Then you interpret this as a single binary number.</p> <table> <thead> <tr> <th>Bit group</th> <th>z</th> <th>y</th> <th>x</th> <th>Resulting value</th> </tr> </thead> <tbody> <tr> <td>2</td> <td>0</td> <td>0</td> <td>1</td> <td>(001)</td> </tr> <tr> <td>1</td> <td>1</td> <td>1</td> <td>0</td> <td>(110)</td> </tr> <tr> <td>0</td> <td>0</td> <td>1</td> <td>1</td> <td>(011)</td> </tr> </tbody> </table> <p>Concatenating them → <code class="language-plaintext highlighter-rouge">001110011₂ = 115</code> (decimal).<br/> So the point <code class="language-plaintext highlighter-rouge">(x=5,y=3,z=2)</code> gets key <code class="language-plaintext highlighter-rouge">115</code>.</p> <p>Two nearby points will have binary patterns that differ in only a few low bits,<br/> so their Morton keys are numerically close → <strong>locality is preserved</strong>.</p> <hr/> <h2 id="4-handling-multiple-batches">4. Handling multiple batches</h2> <p>In training, we often have <strong>multiple point clouds</strong> in the same batch.</p> <p>For a detailed explanation of this batching strategy, see 👉 <a href="/blog/2025/batchingPointclouds/">Batching Point Clouds</a>.</p> <p>If we serialize them all, their Morton keys could <strong>collide</strong> (same value).</p> <p>To prevent this, PointTransformerV3 reserves <strong>different numeric intervals</strong> for each batch.</p> <h3 id="example">Example</h3> <p>Let’s say:</p> <ul> <li>Batch 0 → keys range <code class="language-plaintext highlighter-rouge">[0, 2⁴⁸ - 1]</code></li> <li>Batch 1 → keys range <code class="language-plaintext highlighter-rouge">[2⁴⁸, 2×2⁴⁸ - 1]</code></li> <li>Batch 2 → keys range <code class="language-plaintext highlighter-rouge">[2×2⁴⁸, 3×2⁴⁸ - 1]</code></li> </ul> <p>This is done by <strong>embedding the batch ID</strong> into the highest bits:</p> <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>

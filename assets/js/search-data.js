@@ -30,7 +30,18 @@ ninja.data = [{
           handler: () => {
             window.location.href = "/repositories/";
           },
-        },{id: "post-from-3d-clouds-to-1d-sequences-understanding-point-cloud-serialization",
+        },{id: "post-point-transformer-v3-serialization-based-architecture-for-efficient-point-cloud-processing",
+        
+          title: "Point Transformer v3: Serialization-based Architecture for Efficient Point Cloud Processing",
+        
+        description: "Deep dive into Point Transformer v3&#39;s serialization-based architecture and its improvements over PTv2",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2025/pointTransformerV3/";
+          
+        },
+      },{id: "post-from-3d-clouds-to-1d-sequences-understanding-point-cloud-serialization",
         
           title: "From 3D Clouds to 1D Sequences — Understanding Point Cloud Serialization",
         
