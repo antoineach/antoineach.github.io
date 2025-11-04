@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en"><generator uri="https://jekyllrb.com/" version="4.4.1">Jekyll</generator><link href="http://antoineach.github.io//feed.xml" rel="self" type="application/atom+xml"/><link href="http://antoineach.github.io//" rel="alternate" type="text/html" hreflang="en"/><updated>2025-11-04T14:26:12+00:00</updated><id>http://antoineach.github.io//feed.xml</id><title type="html">blank</title><entry><title type="html">Point Transformer v3: Serialization-based Architecture for Efficient Point Cloud Processing</title><link href="http://antoineach.github.io//blog/2025/pointTransformerV3/" rel="alternate" type="text/html" title="Point Transformer v3: Serialization-based Architecture for Efficient Point Cloud Processing"/><published>2025-10-30T00:00:00+00:00</published><updated>2025-10-30T00:00:00+00:00</updated><id>http://antoineach.github.io//blog/2025/pointTransformerV3</id><content type="html" xml:base="http://antoineach.github.io//blog/2025/pointTransformerV3/"><![CDATA[<h1 id="point-transformer-v3-from-voxelization-to-serialization">Point Transformer v3: From Voxelization to Serialization</h1> <h2 id="introduction">Introduction</h2> <p>After the success of Point Transformer v2’s voxel-based approach, <strong>Point Transformer v3 (PTv3)</strong> introduces a fundamentally different philosophy: instead of organizing points through voxelization and grid pooling, PTv3 uses <strong>spatial serialization</strong> based on space-filling curves. This paradigm shift brings several key advantages:</p> <ul> <li><strong>Full attention mechanism</strong> with QKᵀ instead of grouped vector attention</li> <li><strong>Serialization-based pooling</strong> that preserves spatial locality without explicit voxels</li> <li><strong>Flash Attention support</strong> for massive speedups (up to 10× faster attention computation)</li> <li><strong>Multiple ordering strategies</strong> (Z-order, Hilbert curves) for better spatial coverage</li> </ul> <hr/> <h2 id="overall-architecture">Overall Architecture</h2> <pre><code class="language-mermaid">graph LR
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en"><generator uri="https://jekyllrb.com/" version="4.4.1">Jekyll</generator><link href="http://antoineach.github.io//feed.xml" rel="self" type="application/atom+xml"/><link href="http://antoineach.github.io//" rel="alternate" type="text/html" hreflang="en"/><updated>2025-11-04T14:37:53+00:00</updated><id>http://antoineach.github.io//feed.xml</id><title type="html">blank</title><entry><title type="html">Point Transformer v3: Serialization-based Architecture for Efficient Point Cloud Processing</title><link href="http://antoineach.github.io//blog/2025/pointTransformerV3/" rel="alternate" type="text/html" title="Point Transformer v3: Serialization-based Architecture for Efficient Point Cloud Processing"/><published>2025-10-30T00:00:00+00:00</published><updated>2025-10-30T00:00:00+00:00</updated><id>http://antoineach.github.io//blog/2025/pointTransformerV3</id><content type="html" xml:base="http://antoineach.github.io//blog/2025/pointTransformerV3/"><![CDATA[<h1 id="point-transformer-v3-from-voxelization-to-serialization">Point Transformer v3: From Voxelization to Serialization</h1> <h2 id="introduction">Introduction</h2> <p>After the success of Point Transformer v2’s voxel-based approach, <strong>Point Transformer v3 (PTv3)</strong> introduces a fundamentally different philosophy: instead of organizing points through voxelization and grid pooling, PTv3 uses <strong>spatial serialization</strong> based on space-filling curves. This paradigm shift brings several key advantages:</p> <ul> <li><strong>Full attention mechanism</strong> with QKᵀ instead of grouped vector attention</li> <li><strong>Serialization-based pooling</strong> that preserves spatial locality without explicit voxels</li> <li><strong>Flash Attention support</strong> for massive speedups (up to 10× faster attention computation)</li> <li><strong>Multiple ordering strategies</strong> (Z-order, Hilbert curves) for better spatial coverage</li> </ul> <hr/> <h2 id="overall-architecture">Overall Architecture</h2> <pre><code class="language-mermaid">graph LR
     subgraph INPUT["🎯 INPUT"]
         I0["Point Cloud&lt;br/&gt;(N, 6)&lt;br/&gt;xyz + rgb"]
     end
@@ -370,7 +370,7 @@ Patch 3: qkv[3072:3300]   # Points from cloud 2 (incomplete patch, 228 points)
     <span class="n">softmax_scale</span><span class="o">=</span><span class="n">scale</span>
 <span class="p">)</span>
 <span class="c1"># Uses tiling and recomputation to avoid O(N²) memory
-</span></code></pre></div></div> <p>The speedup is dramatic - up to <strong>10× faster</strong> for large patches, while using <strong>10× less memory</strong>.</p> <hr/> <h2 id="block-architecture-residual-learning-with-cpe">Block Architecture: Residual Learning with CPE</h2> <p>Each <code class="language-plaintext highlighter-rouge">Block</code> in PTv3 combines attention with <strong>Conditional Position Encoding (CPE)</strong> via sparse convolutions:</p> <pre><code class="language-mermaid">graph LR
+</span></code></pre></div></div> <p>The speedup is dramatic - up to <strong>10× faster</strong> for large patches, while using <strong>10× less memory</strong>.</p> <hr/> <h2 id="block-architecture-residual-learning-with-cpe">Block Architecture: Residual Learning with CPE</h2> <p>Each <code class="language-plaintext highlighter-rouge">Block</code> in PTv3 combines attention with <strong>Conditional Position Encoding (CPE)</strong> via sparse convolutions:</p> <pre><code class="language-mermaid">graph lr
     subgraph BLOCK_COMPACT["🧱 BLOCK"]
         direction TB
         
@@ -843,9 +843,9 @@ SerializedUnpooling:
     Low resolution (M clusters) → High resolution (N points)
     + merges with skip connection
     + uses pooling_inverse for mapping
-</code></pre></div></div> <p><strong>Analogy with PTv2:</strong></p> <ul> <li>PTv2: Unpooling uses <code class="language-plaintext highlighter-rouge">cluster_inverse</code></li> <li>PTv3: Unpooling uses <code class="language-plaintext highlighter-rouge">pooling_inverse</code></li> </ul> <p><strong>Key idea:</strong> Reuse the downsampling mapping to achieve upsampling efficiently.</p> <h2 id="summary">Summary</h2> <p><strong>SerializedUnpooling</strong>:</p> <ol> <li><strong>Retrieve</strong> the parent (skip) and the mapping (<code class="language-plaintext highlighter-rouge">pooling_inverse</code>)</li> <li><strong>Project</strong> low-resolution features to <code class="language-plaintext highlighter-rouge">out_channels</code></li> <li><strong>Project</strong> skip features to <code class="language-plaintext highlighter-rouge">out_channels</code></li> <li><strong>Free upsampling</strong>: <code class="language-plaintext highlighter-rouge">point.feat[pooling_inverse]</code></li> <li><strong>Fuse</strong>: <code class="language-plaintext highlighter-rouge">skip + upsampled</code></li> <li><strong>Return</strong> the parent with fused features</li> </ol> <p><strong>Advantages:</strong></p> <ul> <li>O(N) upsampling (free via indexing)</li> <li>Preserves batch structure</li> <li>Natural skip fusion</li> <li>No costly interpolation</li> </ul> <p><strong>Equivalent to Map Unpooling in PTv2, but adapted to PTv3’s serialized structure.</strong></p> <pre><code class="language-mermaid">graph TB
+</code></pre></div></div> <p><strong>Analogy with PTv2:</strong></p> <ul> <li>PTv2: Unpooling uses <code class="language-plaintext highlighter-rouge">cluster_inverse</code></li> <li>PTv3: Unpooling uses <code class="language-plaintext highlighter-rouge">pooling_inverse</code></li> </ul> <p><strong>Key idea:</strong> Reuse the downsampling mapping to achieve upsampling efficiently.</p> <h2 id="summary">Summary</h2> <p><strong>SerializedUnpooling</strong>:</p> <ol> <li><strong>Retrieve</strong> the parent (skip) and the mapping (<code class="language-plaintext highlighter-rouge">pooling_inverse</code>)</li> <li><strong>Project</strong> low-resolution features to <code class="language-plaintext highlighter-rouge">out_channels</code></li> <li><strong>Project</strong> skip features to <code class="language-plaintext highlighter-rouge">out_channels</code></li> <li><strong>Free upsampling</strong>: <code class="language-plaintext highlighter-rouge">point.feat[pooling_inverse]</code></li> <li><strong>Fuse</strong>: <code class="language-plaintext highlighter-rouge">skip + upsampled</code></li> <li><strong>Return</strong> the parent with fused features</li> </ol> <p><strong>Advantages:</strong></p> <ul> <li>O(N) upsampling (free via indexing)</li> <li>Preserves batch structure</li> <li>Natural skip fusion</li> <li>No costly interpolation</li> </ul> <p><strong>Equivalent to Map Unpooling in PTv2, but adapted to PTv3’s serialized structure.</strong></p> <pre><code class="language-mermaid">graph LR
     subgraph ENC_STAGE0["📦 Encoder Stage 0"]
-        direction TB
+        direction LR
         
         ENC0_IN["Input from Stem&lt;br/&gt;(N, 32)"]
         
@@ -869,9 +869,9 @@ SerializedUnpooling:
     class NOTE noteStyle
     class BLOCKS0 blockStyle
     class ENC0_OUT outputStyle
-</code></pre> <pre><code class="language-mermaid">graph TB
+</code></pre> <pre><code class="language-mermaid">graph LR
     subgraph ENC_STAGE["📦 Encoder Stage s"]
-        direction TB
+        direction LR
         
         ENC_IN["Input&lt;br/&gt;(N_{s-1}, C_{s-1})"]
         
@@ -895,9 +895,9 @@ SerializedUnpooling:
     class POOL poolStyle
     class BLOCKS blockStyle
     class ENC_OUT outputStyle
-</code></pre> <pre><code class="language-mermaid">graph TB
+</code></pre> <pre><code class="language-mermaid">graph LR
     subgraph DEC_STAGE["📤 Decoder Stage s"]
-        direction TB
+        direction LR
         
         DEC_IN["Input Low-Res&lt;br/&gt;(N_{s+1}, C_{s+1})&lt;br/&gt;+ pooling_inverse&lt;br/&gt;+ pooling_parent"]
         

@@ -372,7 +372,7 @@ Patch 3: qkv[3072:3300]   # Points from cloud 2 (incomplete patch, 228 points)
     <span class="n">softmax_scale</span><span class="o">=</span><span class="n">scale</span>
 <span class="p">)</span>
 <span class="c1"># Uses tiling and recomputation to avoid O(N²) memory
-</span></code></pre></div></div> <p>The speedup is dramatic - up to <strong>10× faster</strong> for large patches, while using <strong>10× less memory</strong>.</p> <hr> <h2 id="block-architecture-residual-learning-with-cpe">Block Architecture: Residual Learning with CPE</h2> <p>Each <code class="language-plaintext highlighter-rouge">Block</code> in PTv3 combines attention with <strong>Conditional Position Encoding (CPE)</strong> via sparse convolutions:</p> <pre><code class="language-mermaid">graph LR
+</span></code></pre></div></div> <p>The speedup is dramatic - up to <strong>10× faster</strong> for large patches, while using <strong>10× less memory</strong>.</p> <hr> <h2 id="block-architecture-residual-learning-with-cpe">Block Architecture: Residual Learning with CPE</h2> <p>Each <code class="language-plaintext highlighter-rouge">Block</code> in PTv3 combines attention with <strong>Conditional Position Encoding (CPE)</strong> via sparse convolutions:</p> <pre><code class="language-mermaid">graph lr
     subgraph BLOCK_COMPACT["🧱 BLOCK"]
         direction TB
         
@@ -845,9 +845,9 @@ SerializedUnpooling:
     Low resolution (M clusters) → High resolution (N points)
     + merges with skip connection
     + uses pooling_inverse for mapping
-</code></pre></div></div> <p><strong>Analogy with PTv2:</strong></p> <ul> <li>PTv2: Unpooling uses <code class="language-plaintext highlighter-rouge">cluster_inverse</code> </li> <li>PTv3: Unpooling uses <code class="language-plaintext highlighter-rouge">pooling_inverse</code> </li> </ul> <p><strong>Key idea:</strong> Reuse the downsampling mapping to achieve upsampling efficiently.</p> <h2 id="summary">Summary</h2> <p><strong>SerializedUnpooling</strong>:</p> <ol> <li> <strong>Retrieve</strong> the parent (skip) and the mapping (<code class="language-plaintext highlighter-rouge">pooling_inverse</code>)</li> <li> <strong>Project</strong> low-resolution features to <code class="language-plaintext highlighter-rouge">out_channels</code> </li> <li> <strong>Project</strong> skip features to <code class="language-plaintext highlighter-rouge">out_channels</code> </li> <li> <strong>Free upsampling</strong>: <code class="language-plaintext highlighter-rouge">point.feat[pooling_inverse]</code> </li> <li> <strong>Fuse</strong>: <code class="language-plaintext highlighter-rouge">skip + upsampled</code> </li> <li> <strong>Return</strong> the parent with fused features</li> </ol> <p><strong>Advantages:</strong></p> <ul> <li>O(N) upsampling (free via indexing)</li> <li>Preserves batch structure</li> <li>Natural skip fusion</li> <li>No costly interpolation</li> </ul> <p><strong>Equivalent to Map Unpooling in PTv2, but adapted to PTv3’s serialized structure.</strong></p> <pre><code class="language-mermaid">graph TB
+</code></pre></div></div> <p><strong>Analogy with PTv2:</strong></p> <ul> <li>PTv2: Unpooling uses <code class="language-plaintext highlighter-rouge">cluster_inverse</code> </li> <li>PTv3: Unpooling uses <code class="language-plaintext highlighter-rouge">pooling_inverse</code> </li> </ul> <p><strong>Key idea:</strong> Reuse the downsampling mapping to achieve upsampling efficiently.</p> <h2 id="summary">Summary</h2> <p><strong>SerializedUnpooling</strong>:</p> <ol> <li> <strong>Retrieve</strong> the parent (skip) and the mapping (<code class="language-plaintext highlighter-rouge">pooling_inverse</code>)</li> <li> <strong>Project</strong> low-resolution features to <code class="language-plaintext highlighter-rouge">out_channels</code> </li> <li> <strong>Project</strong> skip features to <code class="language-plaintext highlighter-rouge">out_channels</code> </li> <li> <strong>Free upsampling</strong>: <code class="language-plaintext highlighter-rouge">point.feat[pooling_inverse]</code> </li> <li> <strong>Fuse</strong>: <code class="language-plaintext highlighter-rouge">skip + upsampled</code> </li> <li> <strong>Return</strong> the parent with fused features</li> </ol> <p><strong>Advantages:</strong></p> <ul> <li>O(N) upsampling (free via indexing)</li> <li>Preserves batch structure</li> <li>Natural skip fusion</li> <li>No costly interpolation</li> </ul> <p><strong>Equivalent to Map Unpooling in PTv2, but adapted to PTv3’s serialized structure.</strong></p> <pre><code class="language-mermaid">graph LR
     subgraph ENC_STAGE0["📦 Encoder Stage 0"]
-        direction TB
+        direction LR
         
         ENC0_IN["Input from Stem&lt;br/&gt;(N, 32)"]
         
@@ -871,9 +871,9 @@ SerializedUnpooling:
     class NOTE noteStyle
     class BLOCKS0 blockStyle
     class ENC0_OUT outputStyle
-</code></pre> <pre><code class="language-mermaid">graph TB
+</code></pre> <pre><code class="language-mermaid">graph LR
     subgraph ENC_STAGE["📦 Encoder Stage s"]
-        direction TB
+        direction LR
         
         ENC_IN["Input&lt;br/&gt;(N_{s-1}, C_{s-1})"]
         
@@ -897,9 +897,9 @@ SerializedUnpooling:
     class POOL poolStyle
     class BLOCKS blockStyle
     class ENC_OUT outputStyle
-</code></pre> <pre><code class="language-mermaid">graph TB
+</code></pre> <pre><code class="language-mermaid">graph LR
     subgraph DEC_STAGE["📤 Decoder Stage s"]
-        direction TB
+        direction LR
         
         DEC_IN["Input Low-Res&lt;br/&gt;(N_{s+1}, C_{s+1})&lt;br/&gt;+ pooling_inverse&lt;br/&gt;+ pooling_parent"]
         
