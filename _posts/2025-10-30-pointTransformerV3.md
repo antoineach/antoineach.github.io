@@ -579,7 +579,7 @@ The speedup is dramatic - up to **10× faster** for large patches, while using *
 Each `Block` in PTv3 combines attention with **Conditional Position Encoding (CPE)** via sparse convolutions:
 
 ```mermaid
-graph lr
+graph LR
     subgraph BLOCK_COMPACT["🧱 BLOCK"]
         direction TB
         
@@ -1539,7 +1539,7 @@ Let's compare the key architectural differences:
 
 1. **Patch size = 1024**: Large enough for meaningful attention patterns, small enough for memory efficiency
 
-2. **DropPath instead of Dropout**: Regularization at the block level rather than feature level
+2. **DropPath**: Regularization at the block level
 
 3. **Pre-norm architecture**: LayerNorm before attention/MLP for training stability
 
@@ -1563,4 +1563,3 @@ For those implementing PTv3, remember:
 - Consider PDNorm for multi-dataset training
 
 The journey from PTv1's point-based attention to PTv2's voxel-based processing to PTv3's serialization-based approach shows the rapid evolution of point cloud architectures. Each iteration brings us closer to a unified transformer architecture that works across all data modalities - text, images, and now 3D points.
-
