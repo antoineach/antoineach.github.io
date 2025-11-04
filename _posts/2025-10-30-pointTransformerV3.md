@@ -5,7 +5,9 @@ date: 2025-10-30
 description: Deep dive into Point Transformer v3's serialization-based architecture and its improvements over PTv2
 tags: deep-learning point-cloud transformer architecture
 categories: computer-vision
-
+mermaid:
+  enabled: true
+  zoomable: true
 ---
 
 
@@ -1522,14 +1524,12 @@ Let's compare the key architectural differences:
 
 ### Benchmark Results (S3DIS Dataset)
 
-```
-Model      | mIoU  | Speed (ms) | Memory (GB)
------------|-------|------------|-------------
-PTv1       | 70.4  | 800        | 12
-PTv2       | 71.6  | 450        | 8
-PTv3       | 74.3  | 380        | 6 (with Flash)
-PTv3-XL    | 76.2  | 520        | 10
-```
+{% include figure.liquid path="assets/img/pointTransformerV3/s3dis_ptv3.png" class="img-fluid rounded z-depth-1" %}
+
+### Memory Results 
+
+
+{% include figure.liquid path="assets/img/pointTransformerV3/memory_ptv3.png" class="img-fluid rounded z-depth-1" %}
 
 ---
 
