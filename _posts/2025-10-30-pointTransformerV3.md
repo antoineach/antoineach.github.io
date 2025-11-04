@@ -579,7 +579,7 @@ The speedup is dramatic - up to **10× faster** for large patches, while using *
 Each `Block` in PTv3 combines attention with **Conditional Position Encoding (CPE)** via sparse convolutions:
 
 ```mermaid
-graph LR
+graph lr
     subgraph BLOCK_COMPACT["🧱 BLOCK"]
         direction TB
         
@@ -1376,9 +1376,9 @@ SerializedUnpooling:
 
 
 ```mermaid
-graph TB
+graph LR
     subgraph ENC_STAGE0["📦 Encoder Stage 0"]
-        direction TB
+        direction LR
         
         ENC0_IN["Input from Stem<br/>(N, 32)"]
         
@@ -1405,9 +1405,9 @@ graph TB
 ```
 
 ```mermaid
-graph TB
+graph LR
     subgraph ENC_STAGE["📦 Encoder Stage s"]
-        direction TB
+        direction LR
         
         ENC_IN["Input<br/>(N_{s-1}, C_{s-1})"]
         
@@ -1434,9 +1434,9 @@ graph TB
 ```
 
 ```mermaid
-graph TB
+graph LR
     subgraph DEC_STAGE["📤 Decoder Stage s"]
-        direction TB
+        direction LR
         
         DEC_IN["Input Low-Res<br/>(N_{s+1}, C_{s+1})<br/>+ pooling_inverse<br/>+ pooling_parent"]
         
