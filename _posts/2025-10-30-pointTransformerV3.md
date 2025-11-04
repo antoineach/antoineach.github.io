@@ -1563,3 +1563,4 @@ For those implementing PTv3, remember:
 - Consider PDNorm for multi-dataset training
 
 The journey from PTv1's point-based attention to PTv2's voxel-based processing to PTv3's serialization-based approach shows the rapid evolution of point cloud architectures. Each iteration brings us closer to a unified transformer architecture that works across all data modalities - text, images, and now 3D points.
+
