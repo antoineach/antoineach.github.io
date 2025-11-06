@@ -2,7 +2,7 @@
 
 layout: post
 title: "PointMamba: A Simple State Space Model for Point Cloud Analysis"
-date: 2025-11-06
+date: 2025-11-05
 description: Overview of Point-Mamba, a point cloud model using Mamba state-space blocks for efficient classification.
 tags: point-cloud, deep-learning, Mamba, classification, state-space-model, 3D-vision, superpoints, MAE, PointNet
 categories: computer-vision
@@ -554,3 +554,4 @@ graph TB
 
 
 **Point-Mamba is fundamentally a** ***classification*** **architecture, not a segmentation architecture.** Adapting it for segmentation would require significant modifications including upsampling modules, multi-scale skip connections, and point-level feature extraction—none of which are present in the provided codebase.
+
