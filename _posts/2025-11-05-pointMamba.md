@@ -1,4 +1,5 @@
 ---
+
 layout: post
 title: "PointMamba: A Simple State Space Model for Point Cloud Analysis"
 date: 2025-11-06
@@ -8,7 +9,9 @@ categories: computer-vision
 mermaid:
   enabled: true
   zoomable: true
+  
 ---
+
 # Point-Mamba: Understanding the Architecture
 
 {% include figure.liquid path="assets/img/pointMamba/pointMamba_architecture.png" class="img-fluid rounded z-depth-1" %}
@@ -548,5 +551,6 @@ graph TB
 **Limitations:**
 1. **Cannot do dense prediction**: No mechanism to return to N points
 2. **Information loss**: k=32 points compressed into single vector
+
 
 **Point-Mamba is fundamentally a** ***classification*** **architecture, not a segmentation architecture.** Adapting it for segmentation would require significant modifications including upsampling modules, multi-scale skip connections, and point-level feature extraction—none of which are present in the provided codebase.
