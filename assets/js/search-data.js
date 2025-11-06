@@ -30,7 +30,18 @@ ninja.data = [{
           handler: () => {
             window.location.href = "/repositories/";
           },
-        },{id: "post-point-transformer-v3-serialization-based-architecture-for-efficient-point-cloud-processing",
+        },{id: "post-pointmamba-a-simple-state-space-model-for-point-cloud-analysis",
+        
+          title: "PointMamba: A Simple State Space Model for Point Cloud Analysis",
+        
+        description: "Overview of Point-Mamba, a point cloud model using Mamba state-space blocks for efficient classification.",
+        section: "Posts",
+        handler: () => {
+          
+            window.location.href = "/blog/2025/pointMamba/";
+          
+        },
+      },{id: "post-point-transformer-v3-serialization-based-architecture-for-efficient-point-cloud-processing",
         
           title: "Point Transformer v3: Serialization-based Architecture for Efficient Point Cloud Processing",
         
